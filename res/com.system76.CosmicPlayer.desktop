@@ -1,0 +1,10 @@
+#TODO: more build-out, desktop actions, translations?
+[Desktop Entry]
+Name=COSMIC Media Player
+Exec=cosmic-player %F
+Terminal=false
+Type=Application
+StartupNotify=true
+#TODO Icon=
+Categories=COSMIC;AudioVideo;Player;Video;
+Keywords=Audio;Film;Movie;Music;Sound;Video;

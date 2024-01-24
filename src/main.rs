@@ -1,147 +1,394 @@
-extern crate ffmpeg_next as ffmpeg;
+// Copyright 2023 System76 <info@system76.com>
+// SPDX-License-Identifier: GPL-3.0-only
 
-use ffmpeg::format::{input, Pixel};
-use ffmpeg::media::Type;
-use ffmpeg::software::scaling::{context::Context, flag::Flags};
-use ffmpeg::util::frame::video::Video;
-use std::cmp;
-use std::env;
-use std::fs::File;
-use std::io::prelude::*;
-use std::num::NonZeroU32;
-use std::rc::Rc;
-use std::thread;
-use winit::event::{Event, KeyEvent, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
-use winit::keyboard::{Key, NamedKey};
-use winit::window::WindowBuilder;
+use cosmic::{
+    app::{message, Command, Core, Settings},
+    cosmic_config::{self, CosmicConfigEntry},
+    cosmic_theme, executor,
+    iced::{
+        event::{self, Event},
+        keyboard::{Event as KeyEvent, KeyCode, Modifiers},
+        subscription::{self, Subscription},
+        window, Alignment, Length,
+    },
+    widget, Application, ApplicationExt, Element,
+};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    env,
+    path::PathBuf,
+    process,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
-fn ffmpeg(event_loop_proxy: EventLoopProxy<Video>) -> Result<(), ffmpeg::Error> {
-    ffmpeg::init().unwrap();
+use config::{AppTheme, Config, CONFIG_VERSION};
+mod config;
 
-    if let Ok(mut ictx) = input(&env::args().nth(1).expect("Cannot open file.")) {
-        let input = ictx
-            .streams()
-            .best(Type::Video)
-            .ok_or(ffmpeg::Error::StreamNotFound)?;
-        let video_stream_index = input.index();
+mod ffmpeg;
 
-        let context_decoder = ffmpeg::codec::context::Context::from_parameters(input.parameters())?;
-        let mut decoder = context_decoder.decoder().video()?;
+use key_bind::{key_binds, KeyBind};
+mod key_bind;
 
-        let mut scaler = Context::get(
-            decoder.format(),
-            decoder.width(),
-            decoder.height(),
-            Pixel::RGB24,
-            1280, //TODO decoder.width(),
-            720,  //TODO decoder.height(),
-            Flags::BILINEAR,
-        )?;
+mod localize;
 
-        let mut receive_and_process_decoded_frames =
-            |decoder: &mut ffmpeg::decoder::Video| -> Result<(), ffmpeg::Error> {
-                let mut decoded = Video::empty();
-                while decoder.receive_frame(&mut decoded).is_ok() {
-                    let mut rgb_frame = Video::empty();
-                    scaler.run(&decoded, &mut rgb_frame)?;
-                    match event_loop_proxy.send_event(rgb_frame) {
-                        Ok(()) => {}
-                        Err(_err) => {
-                            panic!("event loop closed");
-                        }
-                    }
+/// Runs application with these settings
+#[rustfmt::skip]
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
+    localize::localize();
+
+    let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
+        Ok(config_handler) => {
+            let config = match Config::get_entry(&config_handler) {
+                Ok(ok) => ok,
+                Err((errs, config)) => {
+                    log::info!("errors loading config: {:?}", errs);
+                    config
                 }
-                Ok(())
             };
-
-        for (stream, packet) in ictx.packets() {
-            if stream.index() == video_stream_index {
-                decoder.send_packet(&packet)?;
-                receive_and_process_decoded_frames(&mut decoder)?;
-            }
+            (Some(config_handler), config)
         }
-        decoder.send_eof()?;
-        receive_and_process_decoded_frames(&mut decoder)?;
+        Err(err) => {
+            log::error!("failed to create config handler: {}", err);
+            (None, Config::default())
+        }
+    };
+
+    //TODO: support multiple paths
+    let path = match env::args().skip(1).next() {
+        Some(arg) => PathBuf::from(arg),
+        None => {
+            log::error!("no argument provided");
+            process::exit(1);
+        }
+    };
+
+    let video_frame_lock = ffmpeg::run(path);
+
+    let mut settings = Settings::default();
+    settings = settings.theme(config.app_theme.theme());
+
+    #[cfg(target_os = "redox")]
+    {
+        // Redox does not support resize if doing CSDs
+        settings = settings.client_decorations(false);
     }
+
+    //TODO: allow size limits on iced_winit
+    //settings = settings.size_limits(Limits::NONE.min_width(400.0).min_height(200.0));
+
+    let flags = Flags {
+        config_handler,
+        config,
+        video_frame_lock
+    };
+    cosmic::app::run::<App>(settings, flags)?;
 
     Ok(())
 }
 
-fn main() {
-    let event_loop = EventLoopBuilder::<Video>::with_user_event()
-        .build()
-        .unwrap();
-    let event_loop_proxy = event_loop.create_proxy();
-    thread::spawn(move || {
-        ffmpeg(event_loop_proxy).unwrap();
-    });
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Action {
+    Todo,
+}
 
-    let window = Rc::new(WindowBuilder::new().build(&event_loop).unwrap());
-    let context = softbuffer::Context::new(window.clone()).unwrap();
-    let mut surface = softbuffer::Surface::new(&context, window.clone()).unwrap();
+impl Action {
+    pub fn message(&self) -> Message {
+        match self {
+            Self::Todo => Message::Todo,
+        }
+    }
+}
 
-    let mut rgb_frame_opt: Option<Video> = None;
-    event_loop
-        .run(move |event, elwt| {
-            elwt.set_control_flow(ControlFlow::Wait);
+#[derive(Clone)]
+pub struct Flags {
+    config_handler: Option<cosmic_config::Config>,
+    config: Config,
+    video_frame_lock: Arc<Mutex<Option<ffmpeg::VideoFrame>>>,
+}
 
-            match event {
-                Event::WindowEvent {
-                    window_id,
-                    event: WindowEvent::RedrawRequested,
-                } if window_id == window.id() => {
-                    if let (Some(width), Some(height)) = {
-                        let size = window.inner_size();
-                        (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-                    } {
-                        surface.resize(width, height).unwrap();
-                        //TODO: send size back to ffmpeg thread
+/// Messages that are used specifically by our [`App`].
+#[derive(Clone, Debug)]
+pub enum Message {
+    Todo,
+    AppTheme(AppTheme),
+    Config(Config),
+    Key(Modifiers, KeyCode),
+    SystemThemeModeChange(cosmic_theme::ThemeMode),
+    Tick(Instant),
+    ToggleContextPage(ContextPage),
+    WindowClose,
+    WindowNew,
+}
 
-                        let mut buffer = surface.buffer_mut().unwrap();
-                        let buffer_width = width.get() as usize;
-                        let buffer_height = height.get() as usize;
-                        if let Some(rgb_frame) = &rgb_frame_opt {
-                            let data = rgb_frame.data(0);
-                            let data_width = rgb_frame.width() as usize;
-                            let data_height = rgb_frame.height() as usize;
-                            //TODO: stride?
-                            for y in 0..cmp::min(buffer_height, data_height) {
-                                for x in 0..cmp::min(buffer_width, data_width) {
-                                    let data_index = (y * data_width + x) * 3;
-                                    let red = data[data_index] as u32;
-                                    let green = data[data_index + 1] as u32;
-                                    let blue = data[data_index + 2] as u32;
-                                    let buffer_index = y * buffer_width + x;
-                                    buffer[buffer_index] = blue | (green << 8) | (red << 16);
-                                }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContextPage {
+    Settings,
+}
+
+impl ContextPage {
+    fn title(&self) -> String {
+        match self {
+            Self::Settings => fl!("settings"),
+        }
+    }
+}
+
+/// The [`App`] stores application-specific state.
+pub struct App {
+    core: Core,
+    flags: Flags,
+    app_themes: Vec<String>,
+    context_page: ContextPage,
+    key_binds: HashMap<KeyBind, Action>,
+    handle_opt: Option<widget::image::Handle>,
+}
+
+impl App {
+    fn update_config(&mut self) -> Command<Message> {
+        cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
+    }
+
+    fn update_title(&mut self) -> Command<Message> {
+        let title = "COSMIC Media Player";
+        self.set_header_title(title.to_string());
+        self.set_window_title(title.to_string())
+    }
+
+    fn settings(&self) -> Element<Message> {
+        let app_theme_selected = match self.flags.config.app_theme {
+            AppTheme::Dark => 1,
+            AppTheme::Light => 2,
+            AppTheme::System => 0,
+        };
+        widget::settings::view_column(vec![widget::settings::view_section(fl!("appearance"))
+            .add(
+                widget::settings::item::builder(fl!("theme")).control(widget::dropdown(
+                    &self.app_themes,
+                    Some(app_theme_selected),
+                    move |index| {
+                        Message::AppTheme(match index {
+                            1 => AppTheme::Dark,
+                            2 => AppTheme::Light,
+                            _ => AppTheme::System,
+                        })
+                    },
+                )),
+            )
+            .into()])
+        .into()
+    }
+}
+
+/// Implement [`Application`] to integrate with COSMIC.
+impl Application for App {
+    /// Default async executor to use with the app.
+    type Executor = executor::Default;
+
+    /// Argument received
+    type Flags = Flags;
+
+    /// Message type specific to our [`App`].
+    type Message = Message;
+
+    /// The unique application ID to supply to the window manager.
+    const APP_ID: &'static str = "com.system76.CosmicPlayer";
+
+    fn core(&self) -> &Core {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut Core {
+        &mut self.core
+    }
+
+    /// Creates the application, and optionally emits command on initialize.
+    fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        let app_themes = vec![fl!("match-desktop"), fl!("dark"), fl!("light")];
+        let mut app = App {
+            core,
+            flags,
+            app_themes,
+            context_page: ContextPage::Settings,
+            key_binds: key_binds(),
+            handle_opt: None,
+        };
+
+        let command = app.update_title();
+        (app, command)
+    }
+
+    fn on_escape(&mut self) -> Command<Message> {
+        if self.core.window.show_context {
+            // Close context drawer if open
+            self.core.window.show_context = false;
+        }
+        Command::none()
+    }
+
+    /// Handle application events here.
+    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+        // Helper for updating config values efficiently
+        macro_rules! config_set {
+            ($name: ident, $value: expr) => {
+                match &self.flags.config_handler {
+                    Some(config_handler) => {
+                        match paste::paste! { self.flags.config.[<set_ $name>](config_handler, $value) } {
+                            Ok(_) => {}
+                            Err(err) => {
+                                log::warn!(
+                                    "failed to save config {:?}: {}",
+                                    stringify!($name),
+                                    err
+                                );
                             }
                         }
-
-                        buffer.present().unwrap();
+                    }
+                    None => {
+                        self.flags.config.$name = $value;
+                        log::warn!(
+                            "failed to save config {:?}: no config handler",
+                            stringify!($name)
+                        );
                     }
                 }
-                Event::WindowEvent {
-                    event:
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    logical_key: Key::Named(NamedKey::Escape),
-                                    ..
-                                },
-                            ..
-                        },
-                    window_id,
-                } if window_id == window.id() => {
-                    elwt.exit();
-                }
-                Event::UserEvent(rgb_frame) => {
-                    rgb_frame_opt = Some(rgb_frame);
-                    window.request_redraw();
-                }
-                _ => {}
+            };
+        }
+
+        match message {
+            Message::Todo => {
+                log::warn!("TODO");
             }
+            Message::AppTheme(app_theme) => {
+                config_set!(app_theme, app_theme);
+                return self.update_config();
+            }
+            Message::Config(config) => {
+                if config != self.flags.config {
+                    log::info!("update config");
+                    //TODO: update syntax theme by clearing tabs, only if needed
+                    self.flags.config = config;
+                    return self.update_config();
+                }
+            }
+            Message::Key(modifiers, key_code) => {
+                for (key_bind, action) in self.key_binds.iter() {
+                    if key_bind.matches(modifiers, key_code) {
+                        return self.update(action.message());
+                    }
+                }
+            }
+            Message::SystemThemeModeChange(_theme_mode) => {
+                return self.update_config();
+            }
+            Message::Tick(_time) => {
+                let start = Instant::now();
+
+                match {
+                    let mut video_frame_opt = self.flags.video_frame_lock.lock().unwrap();
+                    video_frame_opt.take()
+                } {
+                    Some(video_frame) => {
+                        self.handle_opt = Some(video_frame.into_handle());
+
+                        let duration = start.elapsed();
+                        log::debug!("converted video frame to handle in {:?}", duration);
+                    }
+                    None => {}
+                }
+            }
+            Message::ToggleContextPage(context_page) => {
+                //TODO: ensure context menus are closed
+                if self.context_page == context_page {
+                    self.core.window.show_context = !self.core.window.show_context;
+                } else {
+                    self.context_page = context_page;
+                    self.core.window.show_context = true;
+                }
+                self.set_context_title(context_page.title());
+            }
+            Message::WindowClose => {
+                return window::close(window::Id::MAIN);
+            }
+            Message::WindowNew => match env::current_exe() {
+                Ok(exe) => match process::Command::new(&exe).spawn() {
+                    Ok(_child) => {}
+                    Err(err) => {
+                        log::error!("failed to execute {:?}: {}", exe, err);
+                    }
+                },
+                Err(err) => {
+                    log::error!("failed to get current executable path: {}", err);
+                }
+            },
+        }
+
+        Command::none()
+    }
+
+    fn context_drawer(&self) -> Option<Element<Message>> {
+        if !self.core.window.show_context {
+            return None;
+        }
+
+        Some(match self.context_page {
+            ContextPage::Settings => self.settings(),
         })
-        .unwrap();
+    }
+
+    /// Creates a view after each update.
+    fn view(&self) -> Element<Self::Message> {
+        let content: Element<_> = match &self.handle_opt {
+            Some(handle) => widget::image(handle.clone())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into(),
+            None => widget::text("Loading").into(),
+        };
+
+        // Uncomment to debug layout:
+        //content.explain(cosmic::iced::Color::WHITE)
+        content
+    }
+
+    fn subscription(&self) -> Subscription<Self::Message> {
+        struct ConfigSubscription;
+        struct ThemeSubscription;
+
+        Subscription::batch([
+            window::frames().map(|(_window_id, instant)| Message::Tick(instant)),
+            event::listen_with(|event, _status| match event {
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    key_code,
+                    modifiers,
+                }) => Some(Message::Key(modifiers, key_code)),
+                _ => None,
+            }),
+            cosmic_config::config_subscription(
+                TypeId::of::<ConfigSubscription>(),
+                Self::APP_ID.into(),
+                CONFIG_VERSION,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::debug!("errors loading config: {:?}", update.errors);
+                }
+                Message::SystemThemeModeChange(update.config)
+            }),
+            cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
+                TypeId::of::<ThemeSubscription>(),
+                cosmic_theme::THEME_MODE_ID.into(),
+                cosmic_theme::ThemeMode::version(),
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::debug!("errors loading theme mode: {:?}", update.errors);
+                }
+                Message::SystemThemeModeChange(update.config)
+            }),
+        ])
+    }
 }
