@@ -264,8 +264,8 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     )?;
 
     let mut start_time_opt = None;
-    let mut start_pts = 0;
-    let mut end_pts = 0;
+    let mut start_sample = 0;
+    let mut end_sample = 0;
     let mut receive_and_process_decoded_audio_frames =
         |decoder: &mut ffmpeg::decoder::Audio| -> Result<(), ffmpeg::Error> {
             let mut decoded = Audio::empty();
@@ -273,9 +273,9 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             while decoder.receive_frame(&mut decoded).is_ok() {
                 if start_time_opt.is_none() {
                     start_time_opt = Some(Instant::now());
-                    start_pts = decoded.pts().unwrap_or(0);
+                    start_sample = end_sample;
                 }
-                end_pts = decoded.pts().unwrap_or(start_pts);
+                end_sample += decoded.samples();
 
                 audio_resampler.run(&decoded, &mut resampled)?;
                 {
@@ -295,25 +295,36 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
             // Sync with audio
             if let Some(start_time) = &start_time_opt {
-                let pts_diff = end_pts - start_pts;
-                let expected_rational = Rational::new(pts_diff as i32, 1) * decoder.time_base();
-                let expected_float = f64::from(expected_rational);
+                let samples = end_sample - start_sample;
+                let expected_float = samples as f64 * f64::from(decoder.time_base());
                 let expected = Duration::from_secs_f64(expected_float);
+                println!(
+                    "PTS {}..{} => {} * {:?} => {}",
+                    start_sample,
+                    end_sample,
+                    samples,
+                    decoder.time_base(),
+                    expected_float
+                );
                 let actual = start_time.elapsed();
                 if expected > actual {
                     let sleep = expected - actual;
-                    println!(
-                        "expected {:?} - actual {:?} = sleep {:?}",
-                        actual, expected, sleep
-                    );
-                    thread::sleep(sleep);
+                    let min_sleep = Duration::from_millis(1);
+                    if sleep > min_sleep {
+                        println!(
+                            "expected {:?} - actual {:?} = sleep {:?}",
+                            actual, expected, sleep
+                        );
+                        // We leave 1s of buffer room
+                        thread::sleep(sleep - min_sleep);
+                    }
                 } else {
                     let skip = actual - expected;
                     println!(
                         "actual {:?} - expected {:?} = skip {:?}",
                         actual, expected, skip
                     );
-                    //TODO: skip frames?
+                    //TODO: handle skipping
                 }
             }
 
