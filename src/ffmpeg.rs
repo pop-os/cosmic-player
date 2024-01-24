@@ -14,6 +14,7 @@ use ffmpeg::{
         format::sample,
         frame::{audio::Audio, video::Video},
     },
+    Rational,
 };
 use std::{
     collections::VecDeque,
@@ -22,7 +23,7 @@ use std::{
     slice,
     sync::{mpsc, Arc, Mutex},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 pub struct VideoFrame(Video);
@@ -137,7 +138,7 @@ where
 
     loop {
         //TODO: move this code to ffmpeg_thread so we don't have to sleep here?
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
     }
 
     Ok(())
@@ -180,35 +181,35 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         loop {
             let start = Instant::now();
 
-            let mut video_frames = 0;
-            let mut scaled_frame = Video::empty();
-            while let Ok(raw_frame) = raw_frame_rx.try_recv() {
-                video_scaler.run(&raw_frame, &mut scaled_frame)?;
+            let mut raw_frame: Video = raw_frame_rx.recv().unwrap();
+            let mut video_frames = 1;
+            while let Ok(extra_frame) = raw_frame_rx.try_recv() {
+                raw_frame = extra_frame;
                 video_frames += 1;
             }
 
-            if video_frames > 0 {
-                let missed = {
-                    let mut video_frame_opt = video_frame_lock.lock().unwrap();
-                    let missed = video_frame_opt.is_some();
-                    *video_frame_opt = Some(VideoFrame(scaled_frame));
-                    missed
-                };
-                if missed {
-                    log::warn!("missed scaled video frame at {}", video_frame_count);
-                }
-                if video_frames > 1 {
-                    log::warn!(
-                        "missed {} raw video frame at {}",
-                        video_frames - 1,
-                        video_frame_count
-                    );
-                }
-                video_frame_count += video_frames;
-
-                let duration = start.elapsed();
-                log::debug!("scaled {} video frames in {:?}", video_frames, duration);
+            let mut scaled_frame = Video::empty();
+            video_scaler.run(&raw_frame, &mut scaled_frame)?;
+            let missed = {
+                let mut video_frame_opt = video_frame_lock.lock().unwrap();
+                let missed = video_frame_opt.is_some();
+                *video_frame_opt = Some(VideoFrame(scaled_frame));
+                missed
+            };
+            if missed {
+                log::warn!("missed scaled video frame at {}", video_frame_count);
             }
+            if video_frames > 1 {
+                log::warn!(
+                    "missed {} raw video frame at {}",
+                    video_frames - 1,
+                    video_frame_count
+                );
+            }
+            video_frame_count += video_frames;
+
+            let duration = start.elapsed();
+            log::debug!("scaled {} video frames in {:?}", video_frames, duration);
         }
     });
 
@@ -262,11 +263,20 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         audio_config.sample_rate().0,
     )?;
 
+    let mut start_time_opt = None;
+    let mut start_pts = 0;
+    let mut end_pts = 0;
     let mut receive_and_process_decoded_audio_frames =
         |decoder: &mut ffmpeg::decoder::Audio| -> Result<(), ffmpeg::Error> {
             let mut decoded = Audio::empty();
             let mut resampled = Audio::empty();
             while decoder.receive_frame(&mut decoded).is_ok() {
+                if start_time_opt.is_none() {
+                    start_time_opt = Some(Instant::now());
+                    start_pts = decoded.pts().unwrap_or(0);
+                }
+                end_pts = decoded.pts().unwrap_or(start_pts);
+
                 audio_resampler.run(&decoded, &mut resampled)?;
                 {
                     // plane method doesn't work with packed samples, so do it manually
@@ -280,6 +290,30 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                         let mut audio_queue = audio_queue_lock.lock().unwrap();
                         audio_queue.extend(plane);
                     }
+                }
+            }
+
+            // Sync with audio
+            if let Some(start_time) = &start_time_opt {
+                let pts_diff = end_pts - start_pts;
+                let expected_rational = Rational::new(pts_diff as i32, 1) * decoder.time_base();
+                let expected_float = f64::from(expected_rational);
+                let expected = Duration::from_secs_f64(expected_float);
+                let actual = start_time.elapsed();
+                if expected > actual {
+                    let sleep = expected - actual;
+                    println!(
+                        "expected {:?} - actual {:?} = sleep {:?}",
+                        actual, expected, sleep
+                    );
+                    thread::sleep(sleep);
+                } else {
+                    let skip = actual - expected;
+                    println!(
+                        "actual {:?} - expected {:?} = skip {:?}",
+                        actual, expected, skip
+                    );
+                    //TODO: skip frames?
                 }
             }
 
