@@ -292,10 +292,15 @@ impl Application for App {
                     video_frame_opt.take()
                 } {
                     Some(video_frame) => {
+                        let pts = video_frame.0.pts();
                         self.handle_opt = Some(video_frame.into_handle());
 
                         let duration = start.elapsed();
-                        log::debug!("converted video frame to handle in {:?}", duration);
+                        log::debug!(
+                            "converted video frame at {:?} to handle in {:?}",
+                            pts,
+                            duration
+                        );
                     }
                     None => {}
                 }

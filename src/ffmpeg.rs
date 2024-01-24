@@ -26,7 +26,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub struct VideoFrame(Video);
+pub struct VideoFrame(pub Video);
 
 impl VideoFrame {
     pub fn into_handle(self) -> widget::image::Handle {
@@ -165,7 +165,6 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let video_format = video_decoder.format();
     let video_width = video_decoder.width();
     let video_height = video_decoder.height();
-    let mut video_frame_count = 0;
     let (raw_frame_tx, raw_frame_rx) = mpsc::channel();
     thread::spawn(move || -> Result<(), ffmpeg::Error> {
         let mut video_scaler = scaling::context::Context::get(
@@ -182,14 +181,15 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             let start = Instant::now();
 
             let mut raw_frame: Video = raw_frame_rx.recv().unwrap();
-            let mut video_frames = 1;
             while let Ok(extra_frame) = raw_frame_rx.try_recv() {
+                log::warn!("missed raw video frame at {:?}", raw_frame.pts());
                 raw_frame = extra_frame;
-                video_frames += 1;
             }
+            let pts = raw_frame.pts();
 
             let mut scaled_frame = Video::empty();
             video_scaler.run(&raw_frame, &mut scaled_frame)?;
+            scaled_frame.set_pts(pts);
             let missed = {
                 let mut video_frame_opt = video_frame_lock.lock().unwrap();
                 let missed = video_frame_opt.is_some();
@@ -197,19 +197,12 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 missed
             };
             if missed {
-                log::warn!("missed scaled video frame at {}", video_frame_count);
+                //TODO: get pts of old frame?
+                log::warn!("missed scaled video frame at {:?}", pts);
             }
-            if video_frames > 1 {
-                log::warn!(
-                    "missed {} raw video frame at {}",
-                    video_frames - 1,
-                    video_frame_count
-                );
-            }
-            video_frame_count += video_frames;
 
             let duration = start.elapsed();
-            log::debug!("scaled {} video frames in {:?}", video_frames, duration);
+            log::debug!("scaled video frame at {:?} in {:?}", pts, duration);
         }
     });
 
@@ -217,11 +210,13 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         |decoder: &mut ffmpeg::decoder::Video| -> Result<(), ffmpeg::Error> {
             let start = Instant::now();
 
+            let mut pts = None;
             let mut video_frames = 0;
             loop {
-                let mut decoded = Video::empty();
-                if decoder.receive_frame(&mut decoded).is_ok() {
-                    raw_frame_tx.send(decoded).unwrap();
+                let mut raw_frame = Video::empty();
+                if decoder.receive_frame(&mut raw_frame).is_ok() {
+                    pts = raw_frame.pts();
+                    raw_frame_tx.send(raw_frame).unwrap();
                     video_frames += 1;
                 } else {
                     break;
@@ -230,7 +225,12 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
             if video_frames > 0 {
                 let duration = start.elapsed();
-                log::debug!("received {} video frames in {:?}", video_frames, duration);
+                log::debug!(
+                    "received {} video frames at {:?} in {:?}",
+                    video_frames,
+                    pts,
+                    duration
+                );
             }
 
             Ok(())
@@ -266,6 +266,8 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let mut start_time_opt = None;
     let mut start_sample = 0;
     let mut end_sample = 0;
+    let min_sleep = Duration::from_millis(1);
+    let min_skip = Duration::from_millis(1);
     let mut receive_and_process_decoded_audio_frames =
         |decoder: &mut ffmpeg::decoder::Audio| -> Result<(), ffmpeg::Error> {
             let mut decoded = Audio::empty();
@@ -298,33 +300,26 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 let samples = end_sample - start_sample;
                 let expected_float = samples as f64 * f64::from(decoder.time_base());
                 let expected = Duration::from_secs_f64(expected_float);
-                println!(
-                    "PTS {}..{} => {} * {:?} => {}",
-                    start_sample,
-                    end_sample,
-                    samples,
-                    decoder.time_base(),
-                    expected_float
-                );
                 let actual = start_time.elapsed();
                 if expected > actual {
                     let sleep = expected - actual;
-                    let min_sleep = Duration::from_millis(1);
                     if sleep > min_sleep {
                         println!(
                             "expected {:?} - actual {:?} = sleep {:?}",
                             actual, expected, sleep
                         );
-                        // We leave 1s of buffer room
+                        // We leave 1ms of buffer room
                         thread::sleep(sleep - min_sleep);
                     }
                 } else {
                     let skip = actual - expected;
-                    println!(
-                        "actual {:?} - expected {:?} = skip {:?}",
-                        actual, expected, skip
-                    );
-                    //TODO: handle skipping
+                    if skip > min_skip {
+                        println!(
+                            "actual {:?} - expected {:?} = skip {:?}",
+                            actual, expected, skip
+                        );
+                        //TODO: handle frame skipping
+                    }
                 }
             }
 
