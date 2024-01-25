@@ -10,10 +10,11 @@ use ffmpeg::{
     media::Type,
     software::{resampling, scaling},
     util::{
-        channel_layout,
+        channel_layout, error,
         format::sample,
         frame::{audio::Audio, video::Video},
     },
+    Packet,
 };
 use std::{
     collections::VecDeque,
@@ -24,6 +25,11 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+#[derive(Clone, Debug)]
+pub enum PlayerMessage {
+    SeekRelative(f64),
+}
 
 pub struct VideoFrame(pub Video);
 
@@ -143,6 +149,7 @@ where
 
 fn ffmpeg_thread<P: AsRef<Path>>(
     path: P,
+    player_rx: mpsc::Receiver<PlayerMessage>,
     video_frame_lock: Arc<Mutex<Option<VideoFrame>>>,
     audio_config: cpal::SupportedStreamConfig,
     audio_queue_lock: Arc<Mutex<VecDeque<f32>>>,
@@ -329,13 +336,39 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             Ok(())
         };
 
-    for (stream, packet) in ictx.packets() {
-        let start = Instant::now();
-        if stream.index() == video_stream_index {
-            video_packet_tx.send(packet).unwrap();
-        } else if stream.index() == audio_stream_index {
-            audio_decoder.send_packet(&packet)?;
-            receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
+    loop {
+        let mut pts_opt = None;
+        let mut packet = Packet::empty();
+        match packet.read(&mut ictx) {
+            Ok(()) => {
+                pts_opt = packet.pts();
+                if packet.stream() == video_stream_index {
+                    video_packet_tx.send(packet).unwrap();
+                } else if packet.stream() == audio_stream_index {
+                    audio_decoder.send_packet(&packet)?;
+                    receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
+                }
+            }
+            Err(error::Error::Eof) => break,
+            Err(_err) => {}
+        }
+
+        while let Ok(message) = player_rx.try_recv() {
+            match message {
+                PlayerMessage::SeekRelative(seek_seconds) => {
+                    if let Some(pts) = pts_opt {
+                        //TODO: use time base instead of hardcoded values
+                        let timestamp = (pts + (seek_seconds * 1000.0) as i64) * 1000;
+                        if seek_seconds.is_sign_negative() {
+                            println!("backwards {} = {}", seek_seconds, timestamp);
+                            ictx.seek(timestamp, ..timestamp)?;
+                        } else {
+                            println!("forwards {} = {}", seek_seconds, timestamp);
+                            ictx.seek(timestamp, timestamp..)?;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -345,18 +378,26 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     Ok(())
 }
 
-pub fn run(path: PathBuf) -> Arc<Mutex<Option<VideoFrame>>> {
+pub fn run(path: PathBuf) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<Option<VideoFrame>>>) {
     ffmpeg::init().unwrap();
 
     let audio_queue_lock = Arc::new(Mutex::new(VecDeque::new()));
     let audio_config = cpal(audio_queue_lock.clone());
 
+    let (player_tx, player_rx) = mpsc::channel();
     let video_frame_lock = Arc::new(Mutex::new(None));
     {
         let video_frame_lock = video_frame_lock.clone();
         thread::spawn(move || {
-            ffmpeg_thread(path, video_frame_lock, audio_config, audio_queue_lock).unwrap();
+            ffmpeg_thread(
+                path,
+                player_rx,
+                video_frame_lock,
+                audio_config,
+                audio_queue_lock,
+            )
+            .unwrap();
         });
     }
-    video_frame_lock
+    (player_tx, video_frame_lock)
 }

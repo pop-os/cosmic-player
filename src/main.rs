@@ -19,19 +19,20 @@ use std::{
     env,
     path::PathBuf,
     process,
-    sync::{Arc, Mutex},
+    sync::{mpsc, Arc, Mutex},
     time::Instant,
 };
 
 use config::{AppTheme, Config, CONFIG_VERSION};
 mod config;
 
-mod ffmpeg;
-
 use key_bind::{key_binds, KeyBind};
 mod key_bind;
 
 mod localize;
+
+use player::{PlayerMessage, VideoFrame};
+mod player;
 
 /// Runs application with these settings
 #[rustfmt::skip]
@@ -66,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let video_frame_lock = ffmpeg::run(path);
+    let (player_tx, video_frame_lock) = player::run(path);
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
@@ -83,7 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
-        video_frame_lock
+        player_tx,
+        video_frame_lock,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -93,12 +95,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
     Todo,
+    SeekBackward,
+    SeekForward,
 }
 
 impl Action {
     pub fn message(&self) -> Message {
         match self {
             Self::Todo => Message::Todo,
+            Self::SeekBackward => Message::Player(PlayerMessage::SeekRelative(-10.0)),
+            Self::SeekForward => Message::Player(PlayerMessage::SeekRelative(10.0)),
         }
     }
 }
@@ -107,7 +113,8 @@ impl Action {
 pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
-    video_frame_lock: Arc<Mutex<Option<ffmpeg::VideoFrame>>>,
+    player_tx: mpsc::Sender<PlayerMessage>,
+    video_frame_lock: Arc<Mutex<Option<VideoFrame>>>,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -117,6 +124,7 @@ pub enum Message {
     AppTheme(AppTheme),
     Config(Config),
     Key(Modifiers, KeyCode),
+    Player(PlayerMessage),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     Tick(Instant),
     ToggleContextPage(ContextPage),
@@ -280,6 +288,9 @@ impl Application for App {
                         return self.update(action.message());
                     }
                 }
+            }
+            Message::Player(player_message) => {
+                self.flags.player_tx.send(player_message).unwrap();
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();

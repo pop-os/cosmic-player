@@ -42,10 +42,10 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     let mut key_binds = HashMap::new();
 
     macro_rules! bind {
-        ([$($modifier:ident),+ $(,)?], $key_code:ident, $action:ident) => {{
+        ([$($modifier:ident),* $(,)?], $key_code:ident, $action:ident) => {{
             key_binds.insert(
                 KeyBind {
-                    modifiers: vec![$(Modifier::$modifier),+],
+                    modifiers: vec![$(Modifier::$modifier),*],
                     key_code: KeyCode::$key_code,
                 },
                 Action::$action,
@@ -54,6 +54,8 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     }
 
     //TODO: key bindings
+    bind!([], Left, SeekBackward);
+    bind!([], Right, SeekForward);
 
     key_binds
 }
