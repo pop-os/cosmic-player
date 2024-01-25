@@ -136,6 +136,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         .best(Type::Video)
         .ok_or(ffmpeg::Error::StreamNotFound)?;
     let video_stream_index = video_stream.index();
+    let video_time_base = f64::from(video_stream.time_base());
 
     let mut video_decoder = {
         let mut video_decoder_context =
@@ -168,7 +169,9 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let video_format = video_decoder.format();
     let video_width = video_decoder.width();
     let video_height = video_decoder.height();
-    let (cpu_frame_tx, cpu_frame_rx) = mpsc::channel::<Video>();
+    let (cpu_frame_tx, cpu_frame_rx) = mpsc::channel::<(Video, Option<Instant>)>();
+    let min_sleep = Duration::from_millis(1);
+    let min_skip = Duration::from_millis(1);
     thread::Builder::new()
         .name("video_scale".to_string())
         .spawn(move || {
@@ -184,12 +187,13 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             .unwrap();
 
             loop {
-                let mut cpu_frame: Video = cpu_frame_rx.recv().unwrap();
-                while let Ok(extra_frame) = cpu_frame_rx.try_recv() {
-                    log::warn!("missed cpu video frame at {:?}", cpu_frame.pts());
+                let (mut cpu_frame, mut sync_time_opt) = cpu_frame_rx.recv().unwrap();
+                while let Ok((extra_frame, time_opt)) = cpu_frame_rx.try_recv() {
+                    log::warn!("skipping cpu video frame at {:?}", cpu_frame.pts());
                     cpu_frame = extra_frame;
+                    sync_time_opt = time_opt;
                 }
-                let pts = cpu_frame.pts();
+                let pts_opt = cpu_frame.pts();
 
                 // Start count after blocking recv
                 let start = Instant::now();
@@ -206,27 +210,50 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
                 let mut scaled_frame = Video::empty();
                 video_scaler.run(&cpu_frame, &mut scaled_frame).unwrap();
-                scaled_frame.set_pts(pts);
+                scaled_frame.set_pts(pts_opt);
+
+                if let Some(pts) = pts_opt {
+                    let expected_float = pts as f64 * video_time_base;
+                    let expected = Duration::from_secs_f64(expected_float);
+                    if let Some(sync_time) = &sync_time_opt {
+                        // Sync with audio
+                        let actual = sync_time.elapsed();
+                        if expected > actual {
+                            let sleep = expected - actual;
+                            if sleep > min_sleep {
+                                log::debug!("video ahead {:?}", sleep);
+                            }
+                        } else {
+                            let skip = actual - expected;
+                            if skip > min_skip {
+                                log::debug!("video behind {:?}", skip);
+                            }
+                        }
+                    }
+                }
+
+                let video_frame = VideoFrame(scaled_frame);
                 {
                     let mut video_frames = video_frames_lock.lock().unwrap();
-                    video_frames.push_back(VideoFrame(scaled_frame));
+                    video_frames.push_back(video_frame);
                 }
 
                 let duration = start.elapsed();
-                log::debug!("scaled video frame at {:?} in {:?}", pts, duration);
+                log::debug!("scaled video frame at {:?} in {:?}", pts_opt, duration,);
             }
         })?;
 
     // This is a sync channel to reduce skipping
-    let (gpu_frame_tx, gpu_frame_rx) = mpsc::sync_channel::<Video>(1);
+    let (gpu_frame_tx, gpu_frame_rx) = mpsc::sync_channel::<(Video, Option<Instant>)>(1);
     thread::Builder::new()
         .name("video_map_gpu_cpu".to_string())
         .spawn(move || {
             loop {
-                let mut gpu_frame: Video = gpu_frame_rx.recv().unwrap();
-                while let Ok(extra_frame) = gpu_frame_rx.try_recv() {
-                    log::warn!("missed gpu video frame at {:?}", gpu_frame.pts());
+                let (mut gpu_frame, mut sync_time_opt) = gpu_frame_rx.recv().unwrap();
+                while let Ok((extra_frame, time_opt)) = gpu_frame_rx.try_recv() {
+                    log::warn!("skipping gpu video frame at {:?}", gpu_frame.pts());
                     gpu_frame = extra_frame;
+                    sync_time_opt = time_opt;
                 }
                 let pts = gpu_frame.pts();
 
@@ -252,19 +279,21 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     */
                 }
                 cpu_frame.set_pts(pts);
-                cpu_frame_tx.send(cpu_frame).unwrap();
+                cpu_frame_tx.send((cpu_frame, sync_time_opt)).unwrap();
 
                 let duration = start.elapsed();
                 log::debug!("map gpu video frame to cpu at {:?} in {:?}", pts, duration);
             }
         })?;
 
-    let (video_packet_tx, video_packet_rx) = mpsc::channel::<Packet>();
+    let (video_packet_tx, video_packet_rx) = mpsc::channel::<(Packet, Option<Instant>)>();
     thread::Builder::new()
         .name("video_decode".to_string())
         .spawn(move || {
             let mut eof = false;
             while !eof {
+                let mut sync_time_opt = None;
+
                 {
                     let packet_res = video_packet_rx.recv();
 
@@ -273,8 +302,9 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
                     let mut packet_pts = None;
                     match packet_res {
-                        Ok(packet) => {
+                        Ok((packet, time_opt)) => {
                             packet_pts = packet.pts();
+                            sync_time_opt = time_opt;
                             video_decoder.send_packet(&packet).unwrap();
                         }
                         Err(_err) => {
@@ -295,7 +325,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     let mut gpu_frame = Video::empty();
                     if video_decoder.receive_frame(&mut gpu_frame).is_ok() {
                         pts = gpu_frame.pts();
-                        gpu_frame_tx.send(gpu_frame).unwrap();
+                        gpu_frame_tx.send((gpu_frame, sync_time_opt)).unwrap();
                         video_frames += 1;
                     } else {
                         break;
@@ -379,14 +409,14 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     let sleep = expected - actual;
                     if sleep > min_sleep {
                         // We leave min_sleep of buffer room
-                        log::debug!("ahead {:?}", sleep);
+                        log::debug!("audio ahead {:?}", sleep);
                         thread::sleep(sleep - min_sleep);
                     }
                 } else {
                     let skip = actual - expected;
                     if skip > min_skip {
                         //TODO: handle frame skipping
-                        log::debug!("behind {:?}", skip);
+                        log::debug!("audio behind {:?}", skip);
                     }
                 }
             } else {
@@ -407,7 +437,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         match packet.read(&mut ictx) {
             Ok(()) => {
                 if packet.stream() == video_stream_index {
-                    video_packet_tx.send(packet).unwrap();
+                    video_packet_tx.send((packet, sync_time_opt)).unwrap();
                 } else if packet.stream() == audio_stream_index {
                     audio_decoder.send_packet(&packet)?;
                     receive_and_process_decoded_audio_frames(

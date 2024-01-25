@@ -298,10 +298,18 @@ impl Application for App {
             Message::Tick(_time) => {
                 let start = Instant::now();
 
-                match {
+                let video_frame_opt = {
                     let mut video_frames = self.flags.video_frames_lock.lock().unwrap();
-                    video_frames.pop_front()
-                } {
+                    //TODO: show frames at desired presentation time instead of clearing
+                    let mut video_frame_opt = video_frames.pop_front();
+                    while video_frames.len() >= 4 {
+                        if let Some(video_frame) = video_frames.pop_front() {
+                            video_frame_opt = Some(video_frame);
+                        }
+                    }
+                    video_frame_opt
+                };
+                match video_frame_opt {
                     Some(video_frame) => {
                         let pts = video_frame.0.pts();
                         self.handle_opt = Some(video_frame.into_handle());
