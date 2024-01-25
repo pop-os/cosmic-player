@@ -6,6 +6,7 @@ use cpal::{
     FromSample, SizedSample,
 };
 use ffmpeg::{
+    codec::discard,
     format::{input, Pixel},
     media::Type,
     software::{resampling, scaling},
@@ -47,7 +48,9 @@ impl AsRef<[u8]> for VideoFrame {
     }
 }
 
-fn cpal(audio_queue_lock: Arc<Mutex<VecDeque<f32>>>) -> cpal::SupportedStreamConfig {
+fn cpal(
+    audio_queue_lock: Arc<Mutex<VecDeque<f32>>>,
+) -> (cpal::SupportedStreamConfig, Box<dyn StreamTrait>) {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -57,58 +60,36 @@ fn cpal(audio_queue_lock: Arc<Mutex<VecDeque<f32>>>) -> cpal::SupportedStreamCon
         .expect("failed to get default audio output config");
     println!("{:?}: {:?}", device.name(), config);
 
-    {
+    let stream = {
         let config = config.clone();
-        thread::spawn(move || {
-            match config.sample_format() {
-                cpal::SampleFormat::I8 => {
-                    cpal_thread::<i8>(device, config.into(), audio_queue_lock)
-                }
-                cpal::SampleFormat::I16 => {
-                    cpal_thread::<i16>(device, config.into(), audio_queue_lock)
-                }
-                // cpal::SampleFormat::I24 => cpal_thread::<I24>(device, config.into(), audio_queue_lock),
-                cpal::SampleFormat::I32 => {
-                    cpal_thread::<i32>(device, config.into(), audio_queue_lock)
-                }
-                // cpal::SampleFormat::I48 => cpal_thread::<I48>(device, config.into(), audio_queue_lock),
-                cpal::SampleFormat::I64 => {
-                    cpal_thread::<i64>(device, config.into(), audio_queue_lock)
-                }
-                cpal::SampleFormat::U8 => {
-                    cpal_thread::<u8>(device, config.into(), audio_queue_lock)
-                }
-                cpal::SampleFormat::U16 => {
-                    cpal_thread::<u16>(device, config.into(), audio_queue_lock)
-                }
-                // cpal::SampleFormat::U24 => cpal_thread::<U24>(device, config.into(), audio_queue_lock),
-                cpal::SampleFormat::U32 => {
-                    cpal_thread::<u32>(device, config.into(), audio_queue_lock)
-                }
-                // cpal::SampleFormat::U48 => cpal_thread::<U48>(device, config.into(), audio_queue_lock),
-                cpal::SampleFormat::U64 => {
-                    cpal_thread::<u64>(device, config.into(), audio_queue_lock)
-                }
-                cpal::SampleFormat::F32 => {
-                    cpal_thread::<f32>(device, config.into(), audio_queue_lock)
-                }
-                cpal::SampleFormat::F64 => {
-                    cpal_thread::<f64>(device, config.into(), audio_queue_lock)
-                }
-                sample_format => panic!("unsupported sample format '{sample_format}'"),
-            }
-            .unwrap();
-        });
-    }
+        match config.sample_format() {
+            cpal::SampleFormat::I8 => cpal_stream::<i8>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::I16 => cpal_stream::<i16>(device, config.into(), audio_queue_lock),
+            // cpal::SampleFormat::I24 => cpal_stream::<I24>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::I32 => cpal_stream::<i32>(device, config.into(), audio_queue_lock),
+            // cpal::SampleFormat::I48 => cpal_stream::<I48>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::I64 => cpal_stream::<i64>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::U8 => cpal_stream::<u8>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::U16 => cpal_stream::<u16>(device, config.into(), audio_queue_lock),
+            // cpal::SampleFormat::U24 => cpal_stream::<U24>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::U32 => cpal_stream::<u32>(device, config.into(), audio_queue_lock),
+            // cpal::SampleFormat::U48 => cpal_stream::<U48>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::U64 => cpal_stream::<u64>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::F32 => cpal_stream::<f32>(device, config.into(), audio_queue_lock),
+            cpal::SampleFormat::F64 => cpal_stream::<f64>(device, config.into(), audio_queue_lock),
+            sample_format => panic!("unsupported sample format '{sample_format}'"),
+        }
+        .unwrap()
+    };
 
-    config
+    (config, stream)
 }
 
-fn cpal_thread<T>(
+fn cpal_stream<T>(
     device: cpal::Device,
     config: cpal::StreamConfig,
     audio_queue_lock: Arc<Mutex<VecDeque<f32>>>,
-) -> Result<(), Box<dyn Error>>
+) -> Result<Box<dyn StreamTrait>, Box<dyn Error>>
 where
     T: SizedSample + FromSample<f32>,
 {
@@ -135,25 +116,19 @@ where
             }
         }
     };
-
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
-
     let stream = device.build_output_stream(&config, data_fn, err_fn, None)?;
-    stream.play()?;
-
-    loop {
-        //TODO: move this code to ffmpeg_thread so we don't have to sleep here?
-        thread::sleep(Duration::from_millis(1000));
-    }
+    Ok(Box::new(stream))
 }
 
 fn ffmpeg_thread<P: AsRef<Path>>(
     path: P,
     player_rx: mpsc::Receiver<PlayerMessage>,
     video_frame_lock: Arc<Mutex<Option<VideoFrame>>>,
-    audio_config: cpal::SupportedStreamConfig,
-    audio_queue_lock: Arc<Mutex<VecDeque<f32>>>,
-) -> Result<(), ffmpeg::Error> {
+) -> Result<(), Box<dyn Error>> {
+    let audio_queue_lock = Arc::new(Mutex::new(VecDeque::new()));
+    let (audio_config, cpal_stream) = cpal(audio_queue_lock.clone());
+
     let mut ictx = input(&path)?;
 
     let video_stream = ictx
@@ -169,90 +144,107 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let video_format = video_decoder.format();
     let video_width = video_decoder.width();
     let video_height = video_decoder.height();
-    let (raw_frame_tx, raw_frame_rx) = mpsc::channel();
-    thread::spawn(move || -> Result<(), ffmpeg::Error> {
-        let mut video_scaler = scaling::context::Context::get(
-            video_format,
-            video_width,
-            video_height,
-            Pixel::RGBA,
-            video_width,
-            video_height,
-            scaling::Flags::FAST_BILINEAR,
-        )?;
+    let (raw_frame_tx, raw_frame_rx) = mpsc::channel::<Video>();
+    thread::Builder::new()
+        .name("video_scale".to_string())
+        .spawn(move || -> Result<(), ffmpeg::Error> {
+            let mut video_scaler = scaling::context::Context::get(
+                video_format,
+                video_width,
+                video_height,
+                Pixel::RGBA,
+                video_width,
+                video_height,
+                scaling::Flags::FAST_BILINEAR,
+            )?;
 
-        loop {
-            let start = Instant::now();
-
-            let mut raw_frame: Video = raw_frame_rx.recv().unwrap();
-            while let Ok(extra_frame) = raw_frame_rx.try_recv() {
-                log::warn!("missed raw video frame at {:?}", raw_frame.pts());
-                raw_frame = extra_frame;
-            }
-            let pts = raw_frame.pts();
-
-            let mut scaled_frame = Video::empty();
-            video_scaler.run(&raw_frame, &mut scaled_frame)?;
-            scaled_frame.set_pts(pts);
-            let missed_pts_opt = {
-                let mut video_frame_opt = video_frame_lock.lock().unwrap();
-                let missed_pts_opt = match &*video_frame_opt {
-                    Some(old_frame) => Some(old_frame.0.pts()),
-                    None => None,
-                };
-                *video_frame_opt = Some(VideoFrame(scaled_frame));
-                missed_pts_opt
-            };
-            if let Some(missed_pts) = missed_pts_opt {
-                log::warn!("missed scaled video frame at {:?}", missed_pts);
-            }
-
-            let duration = start.elapsed();
-            log::debug!("scaled video frame at {:?} in {:?}", pts, duration);
-        }
-    });
-
-    let (video_packet_tx, video_packet_rx) = mpsc::channel();
-    thread::spawn(move || -> Result<(), ffmpeg::Error> {
-        let mut eof = false;
-        while !eof {
-            let start = Instant::now();
-
-            match video_packet_rx.recv() {
-                Ok(packet) => {
-                    video_decoder.send_packet(&packet)?;
-                }
-                Err(_err) => {
-                    video_decoder.send_eof()?;
-                    eof = true;
-                }
-            }
-
-            let mut pts = None;
-            let mut video_frames = 0;
             loop {
-                let mut raw_frame = Video::empty();
-                if video_decoder.receive_frame(&mut raw_frame).is_ok() {
-                    pts = raw_frame.pts();
-                    raw_frame_tx.send(raw_frame).unwrap();
-                    video_frames += 1;
-                } else {
-                    break;
+                let mut raw_frame: Video = raw_frame_rx.recv().unwrap();
+                while let Ok(extra_frame) = raw_frame_rx.try_recv() {
+                    log::warn!("missed raw video frame at {:?}", raw_frame.pts());
+                    raw_frame = extra_frame;
+                }
+                let pts = raw_frame.pts();
+
+                // Start count after blocking recv
+                let start = Instant::now();
+
+                let mut scaled_frame = Video::empty();
+                video_scaler.run(&raw_frame, &mut scaled_frame)?;
+                scaled_frame.set_pts(pts);
+                let missed_pts_opt = {
+                    let mut video_frame_opt = video_frame_lock.lock().unwrap();
+                    let missed_pts_opt = match &*video_frame_opt {
+                        Some(old_frame) => Some(old_frame.0.pts()),
+                        None => None,
+                    };
+                    *video_frame_opt = Some(VideoFrame(scaled_frame));
+                    missed_pts_opt
+                };
+                if let Some(missed_pts) = missed_pts_opt {
+                    log::warn!("missed scaled video frame at {:?}", missed_pts);
+                }
+
+                let duration = start.elapsed();
+                log::debug!("scaled video frame at {:?} in {:?}", pts, duration);
+            }
+        });
+
+    let (video_packet_tx, video_packet_rx) = mpsc::channel::<Packet>();
+    thread::Builder::new()
+        .name("video_decode".to_string())
+        .spawn(move || -> Result<(), ffmpeg::Error> {
+            let mut eof = false;
+            while !eof {
+                {
+                    let packet_res = video_packet_rx.recv();
+
+                    // Start timer after blocking recv
+                    let start = Instant::now();
+
+                    let mut packet_pts = None;
+                    match packet_res {
+                        Ok(packet) => {
+                            packet_pts = packet.pts();
+                            video_decoder.send_packet(&packet)?;
+                        }
+                        Err(_err) => {
+                            video_decoder.send_eof()?;
+                            eof = true;
+                        }
+                    }
+
+                    let duration = start.elapsed();
+                    log::debug!("sent packet at {:?} in {:?}", packet_pts, duration);
+                }
+
+                let start = Instant::now();
+
+                let mut pts = None;
+                let mut video_frames = 0;
+                loop {
+                    let mut raw_frame = Video::empty();
+                    if video_decoder.receive_frame(&mut raw_frame).is_ok() {
+                        pts = raw_frame.pts();
+                        raw_frame_tx.send(raw_frame).unwrap();
+                        video_frames += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                if video_frames > 0 {
+                    let duration = start.elapsed();
+                    log::debug!(
+                        "received {} video frames at {:?} in {:?}",
+                        video_frames,
+                        pts,
+                        duration
+                    );
                 }
             }
-
-            if video_frames > 0 {
-                let duration = start.elapsed();
-                log::debug!(
-                    "received {} video frames at {:?} in {:?}",
-                    video_frames,
-                    pts,
-                    duration
-                );
-            }
-        }
-        Ok(())
-    });
+            Ok(())
+        });
 
     let audio_stream = ictx
         .streams()
@@ -282,8 +274,6 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         audio_config.sample_rate().0,
     )?;
 
-    let mut sync_sample = 0;
-    let mut current_sample = 0;
     let min_sleep = Duration::from_millis(1);
     let min_skip = Duration::from_millis(1);
     let mut receive_and_process_decoded_audio_frames = |decoder: &mut ffmpeg::decoder::Audio,
@@ -291,7 +281,10 @@ fn ffmpeg_thread<P: AsRef<Path>>(
      -> Result<(), ffmpeg::Error> {
         let mut decoded = Audio::empty();
         let mut resampled = Audio::empty();
+        let mut pts_opt = None;
         while decoder.receive_frame(&mut decoded).is_ok() {
+            pts_opt = decoded.pts();
+
             audio_resampler.run(&decoded, &mut resampled)?;
             {
                 // plane method doesn't work with packed samples, so do it manually
@@ -306,35 +299,38 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     audio_queue.extend(plane);
                 }
             }
-
-            current_sample += decoded.samples();
-            if sync_time_opt.is_none() {
-                *sync_time_opt = Some(Instant::now());
-                sync_sample = current_sample;
-            }
         }
 
-        // Sync with audio
-        if let Some(sync_time) = &sync_time_opt {
-            let samples = current_sample - sync_sample;
-            let expected_float = (samples as f64) / f64::from(decoder.rate());
+        if let Some(pts) = pts_opt {
+            let expected_float = pts as f64 * audio_time_base;
             let expected = Duration::from_secs_f64(expected_float);
-            let actual = sync_time.elapsed();
-            if expected > actual {
-                let sleep = expected - actual;
-                if sleep > min_sleep {
-                    // We leave min_sleep of buffer room
-                    thread::sleep(sleep - min_sleep);
+            if let Some(sync_time) = &sync_time_opt {
+                // Sync with audio
+                let actual = sync_time.elapsed();
+                if expected > actual {
+                    let sleep = expected - actual;
+                    if sleep > min_sleep {
+                        // We leave min_sleep of buffer room
+                        log::debug!("ahead {:?}", sleep);
+                        thread::sleep(sleep - min_sleep);
+                    }
+                } else {
+                    let skip = actual - expected;
+                    if skip > min_skip {
+                        //TODO: handle frame skipping
+                        log::debug!("behind {:?}", skip);
+                    }
                 }
             } else {
-                let skip = actual - expected;
-                if skip > min_skip {
-                    //TODO: handle frame skipping
-                }
+                // Set up sync
+                *sync_time_opt = Some(Instant::now() - expected);
             }
         }
         Ok(())
     };
+
+    // Start CPAL stream
+    cpal_stream.play()?;
 
     let mut sync_time_opt = None;
     let mut seconds_opt = None;
@@ -394,23 +390,16 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 pub fn run(path: PathBuf) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<Option<VideoFrame>>>) {
     ffmpeg::init().unwrap();
 
-    let audio_queue_lock = Arc::new(Mutex::new(VecDeque::new()));
-    let audio_config = cpal(audio_queue_lock.clone());
-
     let (player_tx, player_rx) = mpsc::channel();
     let video_frame_lock = Arc::new(Mutex::new(None));
     {
         let video_frame_lock = video_frame_lock.clone();
-        thread::spawn(move || {
-            ffmpeg_thread(
-                path,
-                player_rx,
-                video_frame_lock,
-                audio_config,
-                audio_queue_lock,
-            )
-            .unwrap();
-        });
+        thread::Builder::new()
+            .name("ffmpeg".to_string())
+            .spawn(move || {
+                ffmpeg_thread(path, player_rx, video_frame_lock).unwrap();
+            });
     }
+
     (player_tx, video_frame_lock)
 }
