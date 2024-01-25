@@ -259,6 +259,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         .best(Type::Audio)
         .ok_or(ffmpeg::Error::StreamNotFound)?;
     let audio_stream_index = audio_stream.index();
+    let audio_time_base = f64::from(audio_stream.time_base());
 
     let audio_context_decoder =
         ffmpeg::codec::context::Context::from_parameters(audio_stream.parameters())?;
@@ -281,72 +282,77 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         audio_config.sample_rate().0,
     )?;
 
-    let mut start_time_opt = None;
-    let mut start_sample = 0;
-    let mut end_sample = 0;
+    let mut sync_sample = 0;
+    let mut current_sample = 0;
     let min_sleep = Duration::from_millis(1);
     let min_skip = Duration::from_millis(1);
-    let mut receive_and_process_decoded_audio_frames =
-        |decoder: &mut ffmpeg::decoder::Audio| -> Result<(), ffmpeg::Error> {
-            let mut decoded = Audio::empty();
-            let mut resampled = Audio::empty();
-            while decoder.receive_frame(&mut decoded).is_ok() {
-                audio_resampler.run(&decoded, &mut resampled)?;
+    let mut receive_and_process_decoded_audio_frames = |decoder: &mut ffmpeg::decoder::Audio,
+                                                        sync_time_opt: &mut Option<Instant>|
+     -> Result<(), ffmpeg::Error> {
+        let mut decoded = Audio::empty();
+        let mut resampled = Audio::empty();
+        while decoder.receive_frame(&mut decoded).is_ok() {
+            audio_resampler.run(&decoded, &mut resampled)?;
+            {
+                // plane method doesn't work with packed samples, so do it manually
+                let plane = unsafe {
+                    slice::from_raw_parts(
+                        (*resampled.as_ptr()).data[0] as *const f32,
+                        resampled.samples() * resampled.channels() as usize,
+                    )
+                };
                 {
-                    // plane method doesn't work with packed samples, so do it manually
-                    let plane = unsafe {
-                        slice::from_raw_parts(
-                            (*resampled.as_ptr()).data[0] as *const f32,
-                            resampled.samples() * resampled.channels() as usize,
-                        )
-                    };
-                    {
-                        let mut audio_queue = audio_queue_lock.lock().unwrap();
-                        audio_queue.extend(plane);
-                    }
-                }
-
-                end_sample += decoded.samples();
-                if start_time_opt.is_none() {
-                    start_time_opt = Some(Instant::now());
-                    start_sample = end_sample;
+                    let mut audio_queue = audio_queue_lock.lock().unwrap();
+                    audio_queue.extend(plane);
                 }
             }
 
-            // Sync with audio
-            if let Some(start_time) = &start_time_opt {
-                let samples = end_sample - start_sample;
-                let expected_float = (samples as f64) / f64::from(decoder.rate());
-                let expected = Duration::from_secs_f64(expected_float);
-                let actual = start_time.elapsed();
-                if expected > actual {
-                    let sleep = expected - actual;
-                    if sleep > min_sleep {
-                        // We leave min_sleep of buffer room
-                        thread::sleep(sleep - min_sleep);
-                    }
-                } else {
-                    let skip = actual - expected;
-                    if skip > min_skip {
-                        //TODO: handle frame skipping
-                    }
+            current_sample += decoded.samples();
+            if sync_time_opt.is_none() {
+                *sync_time_opt = Some(Instant::now());
+                sync_sample = current_sample;
+            }
+        }
+
+        // Sync with audio
+        if let Some(sync_time) = &sync_time_opt {
+            let samples = current_sample - sync_sample;
+            let expected_float = (samples as f64) / f64::from(decoder.rate());
+            let expected = Duration::from_secs_f64(expected_float);
+            let actual = sync_time.elapsed();
+            if expected > actual {
+                let sleep = expected - actual;
+                if sleep > min_sleep {
+                    // We leave min_sleep of buffer room
+                    thread::sleep(sleep - min_sleep);
+                }
+            } else {
+                let skip = actual - expected;
+                if skip > min_skip {
+                    //TODO: handle frame skipping
                 }
             }
+        }
+        Ok(())
+    };
 
-            Ok(())
-        };
-
+    let mut sync_time_opt = None;
+    let mut seconds_opt = None;
     loop {
-        let mut pts_opt = None;
         let mut packet = Packet::empty();
         match packet.read(&mut ictx) {
             Ok(()) => {
-                pts_opt = packet.pts();
                 if packet.stream() == video_stream_index {
                     video_packet_tx.send(packet).unwrap();
                 } else if packet.stream() == audio_stream_index {
                     audio_decoder.send_packet(&packet)?;
-                    receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
+                    receive_and_process_decoded_audio_frames(
+                        &mut audio_decoder,
+                        &mut sync_time_opt,
+                    )?;
+                    if let Some(pts) = packet.pts() {
+                        seconds_opt = Some(pts as f64 * audio_time_base);
+                    }
                 }
             }
             Err(error::Error::Eof) => break,
@@ -356,16 +362,23 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         while let Ok(message) = player_rx.try_recv() {
             match message {
                 PlayerMessage::SeekRelative(seek_seconds) => {
-                    if let Some(pts) = pts_opt {
+                    if let Some(seconds) = seconds_opt {
                         //TODO: use time base instead of hardcoded values
-                        let timestamp = (pts + (seek_seconds * 1000.0) as i64) * 1000;
+                        let timestamp = ((seconds + seek_seconds) * 1000000.0) as i64;
                         if seek_seconds.is_sign_negative() {
-                            println!("backwards {} = {}", seek_seconds, timestamp);
+                            println!(
+                                "backwards {} from {} = {}",
+                                seek_seconds, seconds, timestamp
+                            );
                             ictx.seek(timestamp, ..timestamp)?;
                         } else {
-                            println!("forwards {} = {}", seek_seconds, timestamp);
+                            println!("forwards {} from {} = {}", seek_seconds, seconds, timestamp);
                             ictx.seek(timestamp, timestamp..)?;
                         }
+
+                        //TODO: improve sync when seeking
+                        // Clear audio sync time
+                        sync_time_opt = None;
                     }
                 }
             }
@@ -373,7 +386,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     }
 
     audio_decoder.send_eof()?;
-    receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
+    receive_and_process_decoded_audio_frames(&mut audio_decoder, &mut sync_time_opt)?;
 
     Ok(())
 }
