@@ -14,7 +14,6 @@ use ffmpeg::{
         format::sample,
         frame::{audio::Audio, video::Video},
     },
-    Rational,
 };
 use std::{
     collections::VecDeque,
@@ -140,8 +139,6 @@ where
         //TODO: move this code to ffmpeg_thread so we don't have to sleep here?
         thread::sleep(Duration::from_millis(1000));
     }
-
-    Ok(())
 }
 
 fn ffmpeg_thread<P: AsRef<Path>>(
@@ -190,15 +187,17 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             let mut scaled_frame = Video::empty();
             video_scaler.run(&raw_frame, &mut scaled_frame)?;
             scaled_frame.set_pts(pts);
-            let missed = {
+            let missed_pts_opt = {
                 let mut video_frame_opt = video_frame_lock.lock().unwrap();
-                let missed = video_frame_opt.is_some();
+                let missed_pts_opt = match &*video_frame_opt {
+                    Some(old_frame) => Some(old_frame.0.pts()),
+                    None => None,
+                };
                 *video_frame_opt = Some(VideoFrame(scaled_frame));
-                missed
+                missed_pts_opt
             };
-            if missed {
-                //TODO: get pts of old frame?
-                log::warn!("missed scaled video frame at {:?}", pts);
+            if let Some(missed_pts) = missed_pts_opt {
+                log::warn!("missed scaled video frame at {:?}", missed_pts);
             }
 
             let duration = start.elapsed();
@@ -273,12 +272,6 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             let mut decoded = Audio::empty();
             let mut resampled = Audio::empty();
             while decoder.receive_frame(&mut decoded).is_ok() {
-                if start_time_opt.is_none() {
-                    start_time_opt = Some(Instant::now());
-                    start_sample = end_sample;
-                }
-                end_sample += decoded.samples();
-
                 audio_resampler.run(&decoded, &mut resampled)?;
                 {
                     // plane method doesn't work with packed samples, so do it manually
@@ -293,31 +286,29 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                         audio_queue.extend(plane);
                     }
                 }
+
+                end_sample += decoded.samples();
+                if start_time_opt.is_none() {
+                    start_time_opt = Some(Instant::now());
+                    start_sample = end_sample;
+                }
             }
 
             // Sync with audio
             if let Some(start_time) = &start_time_opt {
                 let samples = end_sample - start_sample;
-                let expected_float = samples as f64 * f64::from(decoder.time_base());
+                let expected_float = (samples as f64) / f64::from(decoder.rate());
                 let expected = Duration::from_secs_f64(expected_float);
                 let actual = start_time.elapsed();
                 if expected > actual {
                     let sleep = expected - actual;
                     if sleep > min_sleep {
-                        println!(
-                            "expected {:?} - actual {:?} = sleep {:?}",
-                            actual, expected, sleep
-                        );
                         // We leave 1ms of buffer room
                         thread::sleep(sleep - min_sleep);
                     }
                 } else {
                     let skip = actual - expected;
                     if skip > min_skip {
-                        println!(
-                            "actual {:?} - expected {:?} = skip {:?}",
-                            actual, expected, skip
-                        );
                         //TODO: handle frame skipping
                     }
                 }
