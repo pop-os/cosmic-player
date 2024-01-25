@@ -46,6 +46,11 @@ check *args:
 # Runs a clippy check with JSON message format
 check-json: (check '--message-format=json')
 
+dev *args:
+    cargo fmt
+    cargo build --profile release-with-debug
+    RUST_BACKTRACE=1 RUST_LOG=cosmic_player=info target/release-with-debug/cosmic-player {{args}}
+
 # Profile memory usage with heaptrack
 heaptrack:
     cargo heaptrack --profile release-with-debug
