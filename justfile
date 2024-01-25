@@ -49,7 +49,7 @@ check-json: (check '--message-format=json')
 dev *args:
     cargo fmt
     cargo build --profile release-with-debug
-    RUST_BACKTRACE=1 RUST_LOG=cosmic_player=info target/release-with-debug/cosmic-player {{args}}
+    RUST_BACKTRACE=1 RUST_LOG=cosmic_player=debug target/release-with-debug/cosmic-player {{args}}
 
 # Profile memory usage with heaptrack
 heaptrack:

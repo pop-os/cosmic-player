@@ -15,7 +15,7 @@ use cosmic::{
 };
 use std::{
     any::TypeId,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     env,
     path::PathBuf,
     process,
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let (player_tx, video_frame_lock) = player::run(path);
+    let (player_tx, video_frames_lock) = player::run(path);
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config_handler,
         config,
         player_tx,
-        video_frame_lock,
+        video_frames_lock,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -114,7 +114,7 @@ pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
     player_tx: mpsc::Sender<PlayerMessage>,
-    video_frame_lock: Arc<Mutex<Option<VideoFrame>>>,
+    video_frames_lock: Arc<Mutex<VecDeque<VideoFrame>>>,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -299,8 +299,8 @@ impl Application for App {
                 let start = Instant::now();
 
                 match {
-                    let mut video_frame_opt = self.flags.video_frame_lock.lock().unwrap();
-                    video_frame_opt.take()
+                    let mut video_frames = self.flags.video_frames_lock.lock().unwrap();
+                    video_frames.pop_front()
                 } {
                     Some(video_frame) => {
                         let pts = video_frame.0.pts();

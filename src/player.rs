@@ -6,7 +6,7 @@ use cpal::{
     FromSample, SizedSample,
 };
 use ffmpeg::{
-    codec::discard,
+    codec, ffi,
     format::{input, Pixel},
     media::Type,
     software::{resampling, scaling},
@@ -21,7 +21,7 @@ use std::{
     collections::VecDeque,
     error::Error,
     path::{Path, PathBuf},
-    slice,
+    ptr, slice,
     sync::{mpsc, Arc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -124,7 +124,7 @@ where
 fn ffmpeg_thread<P: AsRef<Path>>(
     path: P,
     player_rx: mpsc::Receiver<PlayerMessage>,
-    video_frame_lock: Arc<Mutex<Option<VideoFrame>>>,
+    video_frames_lock: Arc<Mutex<VecDeque<VideoFrame>>>,
 ) -> Result<(), Box<dyn Error>> {
     let audio_queue_lock = Arc::new(Mutex::new(VecDeque::new()));
     let (audio_config, cpal_stream) = cpal(audio_queue_lock.clone());
@@ -137,17 +137,41 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         .ok_or(ffmpeg::Error::StreamNotFound)?;
     let video_stream_index = video_stream.index();
 
-    let video_context_decoder =
-        ffmpeg::codec::context::Context::from_parameters(video_stream.parameters())?;
-    let mut video_decoder = video_context_decoder.decoder().video()?;
+    let mut video_decoder = {
+        let mut video_decoder_context =
+            codec::context::Context::from_parameters(video_stream.parameters())?;
+
+        //TODO: safe wrappers
+        let mut hw_device_ctx = ptr::null_mut();
+        unsafe {
+            //TODO: support other types
+            let hw_device_kind = ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI;
+            if ffi::av_hwdevice_ctx_create(
+                &mut hw_device_ctx,
+                hw_device_kind,
+                ptr::null(),
+                ptr::null_mut(),
+                0,
+            ) < 0
+            {
+                //TODO: support other hardware devices and fall back to software
+                panic!("failed to get hardware context");
+            }
+
+            (&mut *video_decoder_context.as_mut_ptr()).hw_device_ctx =
+                ffi::av_buffer_ref(hw_device_ctx);
+        }
+
+        video_decoder_context.decoder().video()?
+    };
 
     let video_format = video_decoder.format();
     let video_width = video_decoder.width();
     let video_height = video_decoder.height();
-    let (raw_frame_tx, raw_frame_rx) = mpsc::channel::<Video>();
+    let (cpu_frame_tx, cpu_frame_rx) = mpsc::channel::<Video>();
     thread::Builder::new()
         .name("video_scale".to_string())
-        .spawn(move || -> Result<(), ffmpeg::Error> {
+        .spawn(move || {
             let mut video_scaler = scaling::context::Context::get(
                 video_format,
                 video_width,
@@ -156,44 +180,89 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 video_width,
                 video_height,
                 scaling::Flags::FAST_BILINEAR,
-            )?;
+            )
+            .unwrap();
 
             loop {
-                let mut raw_frame: Video = raw_frame_rx.recv().unwrap();
-                while let Ok(extra_frame) = raw_frame_rx.try_recv() {
-                    log::warn!("missed raw video frame at {:?}", raw_frame.pts());
-                    raw_frame = extra_frame;
+                let mut cpu_frame: Video = cpu_frame_rx.recv().unwrap();
+                while let Ok(extra_frame) = cpu_frame_rx.try_recv() {
+                    log::warn!("missed cpu video frame at {:?}", cpu_frame.pts());
+                    cpu_frame = extra_frame;
                 }
-                let pts = raw_frame.pts();
+                let pts = cpu_frame.pts();
 
                 // Start count after blocking recv
                 let start = Instant::now();
 
+                video_scaler.cached(
+                    cpu_frame.format(),
+                    cpu_frame.width(),
+                    cpu_frame.height(),
+                    Pixel::RGBA,
+                    cpu_frame.width(),
+                    cpu_frame.height(),
+                    scaling::Flags::FAST_BILINEAR,
+                );
+
                 let mut scaled_frame = Video::empty();
-                video_scaler.run(&raw_frame, &mut scaled_frame)?;
+                video_scaler.run(&cpu_frame, &mut scaled_frame).unwrap();
                 scaled_frame.set_pts(pts);
-                let missed_pts_opt = {
-                    let mut video_frame_opt = video_frame_lock.lock().unwrap();
-                    let missed_pts_opt = match &*video_frame_opt {
-                        Some(old_frame) => Some(old_frame.0.pts()),
-                        None => None,
-                    };
-                    *video_frame_opt = Some(VideoFrame(scaled_frame));
-                    missed_pts_opt
-                };
-                if let Some(missed_pts) = missed_pts_opt {
-                    log::warn!("missed scaled video frame at {:?}", missed_pts);
+                {
+                    let mut video_frames = video_frames_lock.lock().unwrap();
+                    video_frames.push_back(VideoFrame(scaled_frame));
                 }
 
                 let duration = start.elapsed();
                 log::debug!("scaled video frame at {:?} in {:?}", pts, duration);
             }
-        });
+        })?;
+
+    // This is a sync channel to reduce skipping
+    let (gpu_frame_tx, gpu_frame_rx) = mpsc::sync_channel::<Video>(1);
+    thread::Builder::new()
+        .name("video_map_gpu_cpu".to_string())
+        .spawn(move || {
+            loop {
+                let mut gpu_frame: Video = gpu_frame_rx.recv().unwrap();
+                while let Ok(extra_frame) = gpu_frame_rx.try_recv() {
+                    log::warn!("missed gpu video frame at {:?}", gpu_frame.pts());
+                    gpu_frame = extra_frame;
+                }
+                let pts = gpu_frame.pts();
+
+                // Start timer after blocking recv
+                let start = Instant::now();
+
+                let mut cpu_frame = Video::empty();
+                unsafe {
+                    if ffi::av_hwframe_transfer_data(cpu_frame.as_mut_ptr(), gpu_frame.as_ptr(), 0)
+                        < 0
+                    {
+                        panic!("av_hwframe_transfer_data failed");
+                    }
+                    /*TODO: MAP OR TRANSFER?
+                    if ffi::av_hwframe_map(
+                        cpu_frame.as_mut_ptr(),
+                        gpu_frame.as_ptr(),
+                        ffi::AV_HWFRAME_MAP_READ as i32,
+                    ) < 0
+                    {
+                        panic!("av_hwframe_map failed");
+                    }
+                    */
+                }
+                cpu_frame.set_pts(pts);
+                cpu_frame_tx.send(cpu_frame).unwrap();
+
+                let duration = start.elapsed();
+                log::debug!("map gpu video frame to cpu at {:?} in {:?}", pts, duration);
+            }
+        })?;
 
     let (video_packet_tx, video_packet_rx) = mpsc::channel::<Packet>();
     thread::Builder::new()
         .name("video_decode".to_string())
-        .spawn(move || -> Result<(), ffmpeg::Error> {
+        .spawn(move || {
             let mut eof = false;
             while !eof {
                 {
@@ -206,10 +275,10 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     match packet_res {
                         Ok(packet) => {
                             packet_pts = packet.pts();
-                            video_decoder.send_packet(&packet)?;
+                            video_decoder.send_packet(&packet).unwrap();
                         }
                         Err(_err) => {
-                            video_decoder.send_eof()?;
+                            video_decoder.send_eof().unwrap();
                             eof = true;
                         }
                     }
@@ -223,10 +292,10 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 let mut pts = None;
                 let mut video_frames = 0;
                 loop {
-                    let mut raw_frame = Video::empty();
-                    if video_decoder.receive_frame(&mut raw_frame).is_ok() {
-                        pts = raw_frame.pts();
-                        raw_frame_tx.send(raw_frame).unwrap();
+                    let mut gpu_frame = Video::empty();
+                    if video_decoder.receive_frame(&mut gpu_frame).is_ok() {
+                        pts = gpu_frame.pts();
+                        gpu_frame_tx.send(gpu_frame).unwrap();
                         video_frames += 1;
                     } else {
                         break;
@@ -243,8 +312,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     );
                 }
             }
-            Ok(())
-        });
+        })?;
 
     let audio_stream = ictx
         .streams()
@@ -254,7 +322,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let audio_time_base = f64::from(audio_stream.time_base());
 
     let audio_context_decoder =
-        ffmpeg::codec::context::Context::from_parameters(audio_stream.parameters())?;
+        codec::context::Context::from_parameters(audio_stream.parameters())?;
     let mut audio_decoder = audio_context_decoder.decoder().audio()?;
 
     let mut audio_resampler = resampling::Context::get(
@@ -387,19 +455,25 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     Ok(())
 }
 
-pub fn run(path: PathBuf) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<Option<VideoFrame>>>) {
+pub fn run(
+    path: PathBuf,
+) -> (
+    mpsc::Sender<PlayerMessage>,
+    Arc<Mutex<VecDeque<VideoFrame>>>,
+) {
     ffmpeg::init().unwrap();
 
     let (player_tx, player_rx) = mpsc::channel();
-    let video_frame_lock = Arc::new(Mutex::new(None));
+    let video_frames_lock = Arc::new(Mutex::new(VecDeque::new()));
     {
-        let video_frame_lock = video_frame_lock.clone();
+        let video_frames_lock = video_frames_lock.clone();
         thread::Builder::new()
             .name("ffmpeg".to_string())
             .spawn(move || {
-                ffmpeg_thread(path, player_rx, video_frame_lock).unwrap();
-            });
+                ffmpeg_thread(path, player_rx, video_frames_lock).unwrap();
+            })
+            .unwrap();
     }
 
-    (player_tx, video_frame_lock)
+    (player_tx, video_frames_lock)
 }
