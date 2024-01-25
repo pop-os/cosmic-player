@@ -205,15 +205,27 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         }
     });
 
-    let mut receive_and_process_decoded_video_frames =
-        |decoder: &mut ffmpeg::decoder::Video| -> Result<(), ffmpeg::Error> {
+    let (video_packet_tx, video_packet_rx) = mpsc::channel();
+    thread::spawn(move || -> Result<(), ffmpeg::Error> {
+        let mut eof = false;
+        while !eof {
             let start = Instant::now();
+
+            match video_packet_rx.recv() {
+                Ok(packet) => {
+                    video_decoder.send_packet(&packet)?;
+                }
+                Err(_err) => {
+                    video_decoder.send_eof()?;
+                    eof = true;
+                }
+            }
 
             let mut pts = None;
             let mut video_frames = 0;
             loop {
                 let mut raw_frame = Video::empty();
-                if decoder.receive_frame(&mut raw_frame).is_ok() {
+                if video_decoder.receive_frame(&mut raw_frame).is_ok() {
                     pts = raw_frame.pts();
                     raw_frame_tx.send(raw_frame).unwrap();
                     video_frames += 1;
@@ -231,9 +243,9 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     duration
                 );
             }
-
-            Ok(())
-        };
+        }
+        Ok(())
+    });
 
     let audio_stream = ictx
         .streams()
@@ -303,7 +315,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 if expected > actual {
                     let sleep = expected - actual;
                     if sleep > min_sleep {
-                        // We leave 1ms of buffer room
+                        // We leave min_sleep of buffer room
                         thread::sleep(sleep - min_sleep);
                     }
                 } else {
@@ -318,17 +330,14 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         };
 
     for (stream, packet) in ictx.packets() {
+        let start = Instant::now();
         if stream.index() == video_stream_index {
-            video_decoder.send_packet(&packet)?;
-            receive_and_process_decoded_video_frames(&mut video_decoder)?;
+            video_packet_tx.send(packet).unwrap();
         } else if stream.index() == audio_stream_index {
             audio_decoder.send_packet(&packet)?;
             receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
         }
     }
-
-    video_decoder.send_eof()?;
-    receive_and_process_decoded_video_frames(&mut video_decoder)?;
 
     audio_decoder.send_eof()?;
     receive_and_process_decoded_audio_frames(&mut audio_decoder)?;
