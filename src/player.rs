@@ -32,7 +32,7 @@ pub enum PlayerMessage {
     SeekRelative(f64),
 }
 
-pub struct VideoFrame(pub Video);
+pub struct VideoFrame(pub Video, pub Option<Instant>);
 
 impl VideoFrame {
     pub fn into_handle(self) -> widget::image::Handle {
@@ -170,8 +170,6 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     let video_width = video_decoder.width();
     let video_height = video_decoder.height();
     let (cpu_frame_tx, cpu_frame_rx) = mpsc::channel::<(Video, Option<Instant>)>();
-    let min_sleep = Duration::from_millis(1);
-    let min_skip = Duration::from_millis(1);
     thread::Builder::new()
         .name("video_scale".to_string())
         .spawn(move || {
@@ -212,27 +210,19 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 video_scaler.run(&cpu_frame, &mut scaled_frame).unwrap();
                 scaled_frame.set_pts(pts_opt);
 
-                if let Some(pts) = pts_opt {
+                let present_time_opt = if let Some(pts) = pts_opt {
                     let expected_float = pts as f64 * video_time_base;
                     let expected = Duration::from_secs_f64(expected_float);
-                    if let Some(sync_time) = &sync_time_opt {
-                        // Sync with audio
-                        let actual = sync_time.elapsed();
-                        if expected > actual {
-                            let sleep = expected - actual;
-                            if sleep > min_sleep {
-                                log::debug!("video ahead {:?}", sleep);
-                            }
-                        } else {
-                            let skip = actual - expected;
-                            if skip > min_skip {
-                                log::debug!("video behind {:?}", skip);
-                            }
-                        }
+                    if let Some(sync_time) = sync_time_opt {
+                        Some(sync_time + expected)
+                    } else {
+                        None
                     }
-                }
+                } else {
+                    None
+                };
 
-                let video_frame = VideoFrame(scaled_frame);
+                let video_frame = VideoFrame(scaled_frame, present_time_opt);
                 {
                     let mut video_frames = video_frames_lock.lock().unwrap();
                     video_frames.push_back(video_frame);

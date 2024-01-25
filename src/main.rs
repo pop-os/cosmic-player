@@ -20,7 +20,7 @@ use std::{
     path::PathBuf,
     process,
     sync::{mpsc, Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use config::{AppTheme, Config, CONFIG_VERSION};
@@ -295,7 +295,7 @@ impl Application for App {
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
             }
-            Message::Tick(_time) => {
+            Message::Tick(frame_time) => {
                 let start = Instant::now();
 
                 let video_frame_opt = {
@@ -303,8 +303,11 @@ impl Application for App {
                     //TODO: show frames at desired presentation time instead of clearing
                     let mut video_frame_opt = video_frames.pop_front();
                     while video_frames.len() >= 4 {
-                        if let Some(video_frame) = video_frames.pop_front() {
-                            video_frame_opt = Some(video_frame);
+                        if let Some(extra_frame) = video_frames.pop_front() {
+                            if let Some(old_frame) = video_frame_opt {
+                                log::warn!("skipping video frame {:?}", old_frame.0.pts());
+                            }
+                            video_frame_opt = Some(extra_frame);
                         }
                     }
                     video_frame_opt
@@ -312,6 +315,7 @@ impl Application for App {
                 match video_frame_opt {
                     Some(video_frame) => {
                         let pts = video_frame.0.pts();
+                        let present_time_opt = video_frame.1;
                         self.handle_opt = Some(video_frame.into_handle());
 
                         let duration = start.elapsed();
@@ -320,6 +324,20 @@ impl Application for App {
                             pts,
                             duration
                         );
+
+                        if let Some(present_time) = present_time_opt {
+                            if present_time > frame_time {
+                                let ahead = present_time - frame_time;
+                                if ahead > Duration::from_millis(1) {
+                                    log::debug!("video ahead {:?}", ahead);
+                                }
+                            } else {
+                                let behind = frame_time - present_time;
+                                if behind > Duration::from_millis(1) {
+                                    log::debug!("video behind {:?}", behind);
+                                }
+                            }
+                        }
                     }
                     None => {}
                 }
