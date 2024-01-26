@@ -309,8 +309,6 @@ impl Application for App {
                             }
                             // Frame is ready to be shown
                             video_frame_opt = Some(video_frame);
-                            //TODO: allow skipping?
-                            break;
                         } else {
                             // Put frame back and exit loop
                             video_frames.push_front(video_frame);
