@@ -93,6 +93,13 @@ impl VideoQueue {
         }
     }
 
+    pub fn push(&mut self, frame: VideoFrame) {
+        // Discard all frames that are newer than frame to fix seeking and duration calculation
+        self.data
+            .retain(|other| other.1.map_or(true, |x| x <= frame.1.unwrap_or(x)));
+        self.data.push_back(frame);
+    }
+
     pub fn duration(&self) -> Duration {
         //TODO: can accurate duration actually be calculated since one frame would count as zero?
         let mut start_end_opt = None;
@@ -309,7 +316,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                     let video_frame = VideoFrame(scaled_frame, present_time_opt);
                     {
                         let mut video_queue = video_queue_lock.lock().unwrap();
-                        video_queue.data.push_back(video_frame);
+                        video_queue.push(video_frame);
                     }
 
                     let duration = start.elapsed();
