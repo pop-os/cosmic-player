@@ -15,7 +15,7 @@ use cosmic::{
 };
 use std::{
     any::TypeId,
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     env,
     path::PathBuf,
     process,
@@ -31,7 +31,7 @@ mod key_bind;
 
 mod localize;
 
-use player::{PlayerMessage, VideoFrame};
+use player::{PlayerMessage, VideoFrame, VideoQueue};
 mod player;
 
 /// Runs application with these settings
@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let (player_tx, video_frames_lock) = player::run(path);
+    let (player_tx, video_queue_lock) = player::run(path);
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config_handler,
         config,
         player_tx,
-        video_frames_lock,
+        video_queue_lock,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -114,7 +114,7 @@ pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
     player_tx: mpsc::Sender<PlayerMessage>,
-    video_frames_lock: Arc<Mutex<VecDeque<VideoFrame>>>,
+    video_queue_lock: Arc<Mutex<VideoQueue>>,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -299,23 +299,25 @@ impl Application for App {
                 let start = Instant::now();
 
                 let mut video_frame_opt: Option<VideoFrame> = None;
-                {
-                    let mut video_frames = self.flags.video_frames_lock.lock().unwrap();
-                    while let Some(video_frame) = video_frames.pop_front() {
-                        if video_frame.1.unwrap_or(frame_time) <= frame_time {
+                let delayed_time = {
+                    let mut video_queue = self.flags.video_queue_lock.lock().unwrap();
+                    let delayed_time = frame_time - video_queue.delay;
+                    while let Some(video_frame) = video_queue.data.pop_front() {
+                        if video_frame.1.unwrap_or(delayed_time) <= delayed_time {
                             if let Some(old_frame) = video_frame_opt {
-                                //TODO: log this outside of locking video_frames_lock?
+                                //TODO: log this outside of locking video_queue_lock?
                                 log::warn!("skipping video frame {:?}", old_frame.0.pts());
                             }
                             // Frame is ready to be shown
                             video_frame_opt = Some(video_frame);
                         } else {
                             // Put frame back and exit loop
-                            video_frames.push_front(video_frame);
+                            video_queue.data.push_front(video_frame);
                             break;
                         }
                     }
-                }
+                    delayed_time
+                };
 
                 match video_frame_opt {
                     Some(video_frame) => {
@@ -331,13 +333,13 @@ impl Application for App {
                         );
 
                         if let Some(present_time) = present_time_opt {
-                            if present_time > frame_time {
-                                let ahead = present_time - frame_time;
+                            if present_time > delayed_time {
+                                let ahead = present_time - delayed_time;
                                 if ahead > Duration::from_millis(1) {
                                     log::debug!("video ahead {:?}", ahead);
                                 }
                             } else {
-                                let behind = frame_time - present_time;
+                                let behind = delayed_time - present_time;
                                 if behind > Duration::from_millis(1) {
                                     log::debug!("video behind {:?}", behind);
                                 }
