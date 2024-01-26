@@ -185,12 +185,18 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             .unwrap();
 
             loop {
-                let (mut cpu_frame, mut sync_time_opt) = cpu_frame_rx.recv().unwrap();
-                while let Ok((extra_frame, time_opt)) = cpu_frame_rx.try_recv() {
-                    log::warn!("skipping cpu video frame at {:?}", cpu_frame.pts());
-                    cpu_frame = extra_frame;
-                    sync_time_opt = time_opt;
+                let mut recv_opt: Option<(Video, Option<Instant>)> = None;
+                while let Ok(recv) = cpu_frame_rx.try_recv() {
+                    if let Some((old_frame, _)) = recv_opt {
+                        //TODO: only skip if behind (frames come in weird timing from codecs)
+                        log::warn!("skipping cpu video frame at {:?}", old_frame.pts());
+                    }
+                    recv_opt = Some(recv);
                 }
+                let (cpu_frame, sync_time_opt) = match recv_opt {
+                    Some(some) => some,
+                    None => cpu_frame_rx.recv().unwrap(),
+                };
                 let pts_opt = cpu_frame.pts();
 
                 // Start count after blocking recv
@@ -238,12 +244,18 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         .name("video_map_gpu_cpu".to_string())
         .spawn(move || {
             loop {
-                let (mut gpu_frame, mut sync_time_opt) = gpu_frame_rx.recv().unwrap();
-                while let Ok((extra_frame, time_opt)) = gpu_frame_rx.try_recv() {
-                    log::warn!("skipping gpu video frame at {:?}", gpu_frame.pts());
-                    gpu_frame = extra_frame;
-                    sync_time_opt = time_opt;
+                let mut recv_opt: Option<(Video, Option<Instant>)> = None;
+                while let Ok(recv) = gpu_frame_rx.try_recv() {
+                    if let Some((old_frame, _)) = recv_opt {
+                        //TODO: only skip if behind (frames come in weird timing from codecs)
+                        log::warn!("skipping gpu video frame at {:?}", old_frame.pts());
+                    }
+                    recv_opt = Some(recv);
                 }
+                let (gpu_frame, sync_time_opt) = match recv_opt {
+                    Some(some) => some,
+                    None => gpu_frame_rx.recv().unwrap(),
+                };
                 let pts = gpu_frame.pts();
 
                 // Start timer after blocking recv
