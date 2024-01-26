@@ -233,8 +233,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             }
         })?;
 
-    // This is a sync channel to reduce skipping
-    let (gpu_frame_tx, gpu_frame_rx) = mpsc::sync_channel::<(Video, Option<Instant>)>(1);
+    let (gpu_frame_tx, gpu_frame_rx) = mpsc::channel::<(Video, Option<Instant>)>();
     thread::Builder::new()
         .name("video_map_gpu_cpu".to_string())
         .spawn(move || {

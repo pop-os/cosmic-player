@@ -298,16 +298,21 @@ impl Application for App {
             Message::Tick(frame_time) => {
                 let start = Instant::now();
 
-                let mut video_frame_opt = None;
+                let mut video_frame_opt: Option<VideoFrame> = None;
                 {
                     let mut video_frames = self.flags.video_frames_lock.lock().unwrap();
-                    if let Some(video_frame) = video_frames.pop_front() {
+                    while let Some(video_frame) = video_frames.pop_front() {
                         if video_frame.1.unwrap_or(frame_time) <= frame_time {
+                            if let Some(old_frame) = video_frame_opt {
+                                //TODO: log this outside of locking video_frames_lock?
+                                log::warn!("skipping video frame {:?}", old_frame.0.pts());
+                            }
                             // Frame is ready to be shown
                             video_frame_opt = Some(video_frame)
                         } else {
-                            // Put frame back
+                            // Put frame back and exit loop
                             video_frames.push_front(video_frame);
+                            break;
                         }
                     }
                 }
