@@ -565,8 +565,8 @@ fn ffmpeg_thread<P: AsRef<Path>>(
             (video_queue_duration, video_queue.delay)
         };
 
-        println!(
-            "VIDEO: {:?}, {:?} AUDIO: {:?}, {:?}",
+        log::debug!(
+            "video: {:?}, {:?} audio: {:?}, {:?}",
             video_queue_duration, video_queue_delay, audio_queue_duration, audio_queue_delay
         );
 
@@ -574,7 +574,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         if min_queue_duration > buffer_duration {
             // If we have enough queued, we can sleep
             let sleep = min_queue_duration - buffer_duration;
-            println!("SLEEP {:?}", sleep);
+            log::debug!("sleep {:?}", sleep);
             thread::sleep(sleep);
         }
 
