@@ -298,20 +298,20 @@ impl Application for App {
             Message::Tick(frame_time) => {
                 let start = Instant::now();
 
-                let video_frame_opt = {
+                let mut video_frame_opt = None;
+                {
                     let mut video_frames = self.flags.video_frames_lock.lock().unwrap();
-                    //TODO: show frames at desired presentation time instead of clearing
-                    let mut video_frame_opt = video_frames.pop_front();
-                    while video_frames.len() >= 4 {
-                        if let Some(extra_frame) = video_frames.pop_front() {
-                            if let Some(old_frame) = video_frame_opt {
-                                log::warn!("skipping video frame {:?}", old_frame.0.pts());
-                            }
-                            video_frame_opt = Some(extra_frame);
+                    if let Some(video_frame) = video_frames.pop_front() {
+                        if video_frame.1.unwrap_or(frame_time) <= frame_time {
+                            // Frame is ready to be shown
+                            video_frame_opt = Some(video_frame)
+                        } else {
+                            // Put frame back
+                            video_frames.push_front(video_frame);
                         }
                     }
-                    video_frame_opt
-                };
+                }
+
                 match video_frame_opt {
                     Some(video_frame) => {
                         let pts = video_frame.0.pts();
