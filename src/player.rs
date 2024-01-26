@@ -588,9 +588,18 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                             ictx.seek(timestamp, timestamp..)?;
                         }
 
-                        //TODO: improve sync when seeking
                         // Clear audio sync time
                         sync_time_opt = None;
+                        // Clear audio and video queues
+                        {
+                            let mut audio_queue = audio_queue_lock.lock().unwrap();
+                            audio_queue.data.clear();
+                        }
+                        {
+                            //TODO: clear pending data stuck in channels
+                            let mut video_queue = video_queue_lock.lock().unwrap();
+                            video_queue.data.clear();
+                        }
                     }
                 }
             }
