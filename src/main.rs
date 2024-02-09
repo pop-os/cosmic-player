@@ -7,7 +7,7 @@ use cosmic::{
     cosmic_theme, executor,
     iced::{
         event::{self, Event},
-        keyboard::{Event as KeyEvent, KeyCode, Modifiers},
+        keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
         window, Alignment, Length,
     },
@@ -123,7 +123,7 @@ pub enum Message {
     Todo,
     AppTheme(AppTheme),
     Config(Config),
-    Key(Modifiers, KeyCode),
+    Key(Modifiers, Key),
     Player(PlayerMessage),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     Tick(Instant),
@@ -282,9 +282,9 @@ impl Application for App {
                     return self.update_config();
                 }
             }
-            Message::Key(modifiers, key_code) => {
+            Message::Key(modifiers, key) => {
                 for (key_bind, action) in self.key_binds.iter() {
-                    if key_bind.matches(modifiers, key_code) {
+                    if key_bind.matches(modifiers, &key) {
                         return self.update(action.message());
                     }
                 }
@@ -410,10 +410,9 @@ impl Application for App {
         Subscription::batch([
             window::frames().map(|(_window_id, instant)| Message::Tick(instant)),
             event::listen_with(|event, _status| match event {
-                Event::Keyboard(KeyEvent::KeyPressed {
-                    key_code,
-                    modifiers,
-                }) => Some(Message::Key(modifiers, key_code)),
+                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
+                    Some(Message::Key(modifiers, key))
+                }
                 _ => None,
             }),
             cosmic_config::config_subscription(

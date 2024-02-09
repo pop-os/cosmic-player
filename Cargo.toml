@@ -24,6 +24,10 @@ default-features = false
 features = ["tokio", "winit"]
 #path = "../libcosmic"
 
+[dependencies.smol_str]
+version = "0.2.1"
+features = ["serde"]
+
 [features]
 default = ["wgpu"]
 wgpu = ["libcosmic/wgpu"]

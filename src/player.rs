@@ -567,7 +567,10 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
         log::debug!(
             "video: {:?}, {:?} audio: {:?}, {:?}",
-            video_queue_duration, video_queue_delay, audio_queue_duration, audio_queue_delay
+            video_queue_duration,
+            video_queue_delay,
+            audio_queue_duration,
+            audio_queue_delay
         );
 
         let min_queue_duration = cmp::min(video_queue_duration, audio_queue_duration);
