@@ -234,14 +234,15 @@ fn ffmpeg_thread<P: AsRef<Path>>(
                 ptr::null(),
                 ptr::null_mut(),
                 0,
-            ) < 0
+            ) == 0
             {
-                //TODO: support other hardware devices and fall back to software
-                panic!("failed to get hardware context");
+                log::info!("using vaapi decoding");
+                (&mut *video_decoder_context.as_mut_ptr()).hw_device_ctx =
+                    ffi::av_buffer_ref(hw_device_ctx);
+            } else {
+                //TODO: support other hardware devices
+                log::warn!("failed to use vaapi decoding, falling back to software decoding");
             }
-
-            (&mut *video_decoder_context.as_mut_ptr()).hw_device_ctx =
-                ffi::av_buffer_ref(hw_device_ctx);
         }
 
         video_decoder_context.decoder().video()?
@@ -352,21 +353,28 @@ fn ffmpeg_thread<P: AsRef<Path>>(
 
                 let mut cpu_frame = Video::empty();
                 unsafe {
-                    if ffi::av_hwframe_transfer_data(cpu_frame.as_mut_ptr(), gpu_frame.as_ptr(), 0)
-                        < 0
-                    {
-                        panic!("av_hwframe_transfer_data failed");
+                    if (&*gpu_frame.as_ptr()).hw_frames_ctx.is_null() {
+                        cpu_frame = gpu_frame;
+                    } else {
+                        if ffi::av_hwframe_transfer_data(
+                            cpu_frame.as_mut_ptr(),
+                            gpu_frame.as_ptr(),
+                            0,
+                        ) < 0
+                        {
+                            panic!("av_hwframe_transfer_data failed");
+                        }
+                        /*TODO: MAP OR TRANSFER?
+                        if ffi::av_hwframe_map(
+                            cpu_frame.as_mut_ptr(),
+                            gpu_frame.as_ptr(),
+                            ffi::AV_HWFRAME_MAP_READ as i32,
+                        ) < 0
+                        {
+                            panic!("av_hwframe_map failed");
+                        }
+                        */
                     }
-                    /*TODO: MAP OR TRANSFER?
-                    if ffi::av_hwframe_map(
-                        cpu_frame.as_mut_ptr(),
-                        gpu_frame.as_ptr(),
-                        ffi::AV_HWFRAME_MAP_READ as i32,
-                    ) < 0
-                    {
-                        panic!("av_hwframe_map failed");
-                    }
-                    */
                 }
                 cpu_frame.set_pts(pts);
                 cpu_frame_tx.send((cpu_frame, sync_time_opt)).unwrap();
