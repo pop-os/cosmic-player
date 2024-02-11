@@ -9,7 +9,7 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        window, Alignment, Length,
+        window, Alignment, Length, Limits,
     },
     widget, Application, ApplicationExt, Element,
 };
@@ -71,15 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
-
-    #[cfg(target_os = "redox")]
-    {
-        // Redox does not support resize if doing CSDs
-        settings = settings.client_decorations(false);
-    }
-
-    //TODO: allow size limits on iced_winit
-    //settings = settings.size_limits(Limits::NONE.min_width(400.0).min_height(200.0));
+    settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
     let flags = Flags {
         config_handler,
