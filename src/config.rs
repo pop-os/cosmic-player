@@ -6,6 +6,8 @@ use cosmic::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::wrappers::HWDeviceType;
+
 pub const CONFIG_VERSION: u64 = 1;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -28,12 +30,14 @@ impl AppTheme {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub app_theme: AppTheme,
+    pub hw_decoder: HWDeviceType,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+            hw_decoder: HWDeviceType::default(),
         }
     }
 }

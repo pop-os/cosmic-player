@@ -17,6 +17,7 @@ rust-embed = "6"
 # Logging
 env_logger = "0.10"
 log = "0.4"
+lexopt = "0.3"
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"

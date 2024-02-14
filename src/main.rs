@@ -34,6 +34,8 @@ mod localize;
 use player::{PlayerMessage, VideoFrame, VideoQueue};
 mod player;
 
+mod wrappers;
+
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
