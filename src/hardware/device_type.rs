@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{fmt, iter::FusedIterator, str::FromStr};
+use std::{fmt, str::FromStr};
 
-use ffmpeg_next::ffi::{av_hwdevice_iterate_types, AVHWDeviceType};
+use ffmpeg_next::ffi::AVHWDeviceType;
 use serde::{
     de::{value::Error as DeError, Error as DeErrorTrait, Unexpected},
     Deserialize, Serialize,
 };
 
+use super::iter::SupportedDeviceIter;
+
 /// Delegate type for [`ffmpeg_next::ffi::AVHWDeviceType`] for configs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum HWDeviceType {
+pub enum DeviceType {
     None,
     /// Compute Unified Device Architecture
     /// Nvidia only.
@@ -52,7 +54,7 @@ pub enum HWDeviceType {
     Vulkan,
 }
 
-impl HWDeviceType {
+impl DeviceType {
     /// Hardware device names for user facing interfaces (logging, configs).
     pub const fn name(self) -> &'static str {
         match self {
@@ -97,7 +99,7 @@ impl HWDeviceType {
     }
 }
 
-impl FromStr for HWDeviceType {
+impl FromStr for DeviceType {
     type Err = DeError;
 
     // av_hwdevice_find_type_by_name returns None for invalid device type names, but this type
@@ -125,13 +127,13 @@ impl FromStr for HWDeviceType {
     }
 }
 
-impl fmt::Display for HWDeviceType {
+impl fmt::Display for DeviceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name())
     }
 }
 
-impl From<AVHWDeviceType> for HWDeviceType {
+impl From<AVHWDeviceType> for DeviceType {
     fn from(value: AVHWDeviceType) -> Self {
         match value {
             AVHWDeviceType::AV_HWDEVICE_TYPE_NONE => Self::None,
@@ -152,59 +154,29 @@ impl From<AVHWDeviceType> for HWDeviceType {
     }
 }
 
-impl Default for HWDeviceType {
+impl From<DeviceType> for AVHWDeviceType {
+    fn from(value: DeviceType) -> Self {
+        match value {
+            DeviceType::None => Self::AV_HWDEVICE_TYPE_NONE,
+            DeviceType::Cuda => Self::AV_HWDEVICE_TYPE_CUDA,
+            DeviceType::D3d11va => Self::AV_HWDEVICE_TYPE_D3D11VA,
+            // NOTE: Next FFmpeg release
+            DeviceType::D3d12va => Self::AV_HWDEVICE_TYPE_NONE,
+            DeviceType::Dxva2 => Self::AV_HWDEVICE_TYPE_DXVA2,
+            DeviceType::Drm => Self::AV_HWDEVICE_TYPE_DRM,
+            DeviceType::MediaCodec => Self::AV_HWDEVICE_TYPE_MEDIACODEC,
+            DeviceType::OpenCl => Self::AV_HWDEVICE_TYPE_OPENCL,
+            DeviceType::Qsv => Self::AV_HWDEVICE_TYPE_QSV,
+            DeviceType::Vaapi => Self::AV_HWDEVICE_TYPE_VAAPI,
+            DeviceType::Vdpau => Self::AV_HWDEVICE_TYPE_VDPAU,
+            DeviceType::VideoToolbox => Self::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
+            DeviceType::Vulkan => Self::AV_HWDEVICE_TYPE_VULKAN,
+        }
+    }
+}
+
+impl Default for DeviceType {
     fn default() -> Self {
         Self::Vaapi
-    }
-}
-
-/// Iterator over system's supported hardware decoders.
-pub struct SupportedDeviceIter {
-    current: AVHWDeviceType,
-}
-
-impl Default for SupportedDeviceIter {
-    fn default() -> Self {
-        // SAFETY: FFmpeg's documentation states that the iterator is delimited by AV_HWDEVICE_TYPE_NONE.
-        let current = unsafe { av_hwdevice_iterate_types(AVHWDeviceType::AV_HWDEVICE_TYPE_NONE) };
-        Self { current }
-    }
-}
-
-impl Iterator for SupportedDeviceIter {
-    type Item = HWDeviceType;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // None is a sentinel value that indicates the iterator is exhausted
-        if self.current == AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
-            None
-        } else {
-            let prev = self.current;
-            // SAFETY: The docs and examples state that the iterator yields the next value
-            // when the previous is passed in.
-            self.current = unsafe { av_hwdevice_iterate_types(prev) };
-
-            Some(prev.into())
-        }
-    }
-}
-
-impl FusedIterator for SupportedDeviceIter {}
-
-#[cfg(test)]
-mod tests {
-    use std::hint::black_box;
-
-    use super::*;
-
-    // The iterator's yielded values aren't important since hardware decoders vary by system
-    // This is just a sanity check to ensure the iterator works
-    #[test]
-    fn supported_device_iter_doesnt_seg_fault() {
-        for decoder in HWDeviceType::supported_devices() {
-            black_box(decoder);
-        }
-
-        let _decoders: Vec<_> = black_box(HWDeviceType::supported_devices().collect());
     }
 }

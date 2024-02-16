@@ -8,7 +8,7 @@ use lexopt::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process};
 
-use crate::wrappers::HWDeviceType;
+use crate::hardware::DeviceType;
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -32,14 +32,14 @@ impl AppTheme {
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Config {
     pub app_theme: AppTheme,
-    pub hw_decoder: HWDeviceType,
+    pub hw_decoder: DeviceType,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
-            hw_decoder: HWDeviceType::default(),
+            hw_decoder: DeviceType::default(),
         }
     }
 }
@@ -54,7 +54,7 @@ impl Config {
 
 pub struct Args {
     pub paths: Vec<PathBuf>,
-    pub decoder: Option<HWDeviceType>,
+    pub decoder: Option<DeviceType>,
 }
 
 impl Args {
@@ -67,7 +67,7 @@ impl Args {
             match arg {
                 Long("list-hwdec") => {
                     println!("Supported hardware decoders:");
-                    for hwdec in HWDeviceType::supported_devices() {
+                    for hwdec in DeviceType::supported_devices() {
                         println!("\t* [{}] {hwdec}", hwdec.short_name());
                     }
                     process::exit(0);

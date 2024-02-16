@@ -28,6 +28,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::config::Config;
+
 //TODO: calculate presentation time of end of queue
 pub struct AudioQueue {
     pub channels: usize,
@@ -207,6 +209,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     path: P,
     player_rx: mpsc::Receiver<PlayerMessage>,
     video_queue_lock: Arc<Mutex<VideoQueue>>,
+    config: Config,
 ) -> Result<(), Box<dyn Error>> {
     let (audio_config, cpal_stream, audio_queue_lock) = cpal();
 
@@ -227,21 +230,23 @@ fn ffmpeg_thread<P: AsRef<Path>>(
         let mut hw_device_ctx = ptr::null_mut();
         unsafe {
             //TODO: support other types
-            let hw_device_kind = ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI;
+            let hw_device_kind = config.hw_decoder;
             if ffi::av_hwdevice_ctx_create(
                 &mut hw_device_ctx,
-                hw_device_kind,
+                hw_device_kind.into(),
                 ptr::null(),
                 ptr::null_mut(),
                 0,
             ) == 0
             {
-                log::info!("using vaapi decoding");
+                log::info!("using {hw_device_kind} decoding");
                 (&mut *video_decoder_context.as_mut_ptr()).hw_device_ctx =
                     ffi::av_buffer_ref(hw_device_ctx);
             } else {
                 //TODO: support other hardware devices
-                log::warn!("failed to use vaapi decoding, falling back to software decoding");
+                log::warn!(
+                    "failed to use {hw_device_kind} decoding, falling back to software decoding"
+                );
             }
         }
 
@@ -630,7 +635,7 @@ fn ffmpeg_thread<P: AsRef<Path>>(
     Ok(())
 }
 
-pub fn run(path: PathBuf) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<VideoQueue>>) {
+pub fn run(path: PathBuf, config: Config) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<VideoQueue>>) {
     ffmpeg::init().unwrap();
 
     let (player_tx, player_rx) = mpsc::channel();
@@ -640,7 +645,7 @@ pub fn run(path: PathBuf) -> (mpsc::Sender<PlayerMessage>, Arc<Mutex<VideoQueue>
         thread::Builder::new()
             .name("ffmpeg".to_string())
             .spawn(move || {
-                ffmpeg_thread(path, player_rx, video_queue_lock).unwrap();
+                ffmpeg_thread(path, player_rx, video_queue_lock, config).unwrap();
             })
             .unwrap();
     }

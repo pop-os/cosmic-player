@@ -32,7 +32,7 @@ mod localize;
 use player::{PlayerMessage, VideoFrame, VideoQueue};
 mod player;
 
-mod wrappers;
+mod hardware;
 
 /// Runs application with these settings
 #[rustfmt::skip]
@@ -72,7 +72,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Args { mut paths, .. } = args;
     let path = paths.pop().unwrap();
 
-    let (player_tx, video_queue_lock) = player::run(path);
+    // TODO: Update video player config when it's updated via the app
+    let (player_tx, video_queue_lock) = player::run(path, config.clone());
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
