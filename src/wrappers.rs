@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::str::FromStr;
+use std::{fmt, iter::FusedIterator, str::FromStr};
 
 use ffmpeg_next::ffi::{av_hwdevice_iterate_types, AVHWDeviceType};
 use serde::{
@@ -25,6 +25,8 @@ pub enum HWDeviceType {
     /// DirectX Video Acceleration 2.0
     /// https://learn.microsoft.com/en-us/windows/win32/medfound/about-dxva-2-0
     Dxva2,
+    /// Direct Rendering Manager
+    /// https://dri.freedesktop.org/wiki/DRM/
     Drm,
     /// MediaCodec
     /// Android only
@@ -70,7 +72,26 @@ impl HWDeviceType {
         }
     }
 
-    /// Supported hardware decoders
+    /// Short name for CLI arguments
+    pub const fn short_name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Cuda => "cuda",
+            Self::Dxva2 => "dxva2",
+            Self::D3d11va => "d3d11va",
+            Self::D3d12va => "d3d12va",
+            Self::Drm => "drm",
+            Self::MediaCodec => "mediacodec",
+            Self::OpenCl => "opencl",
+            Self::Qsv => "qsv",
+            Self::Vaapi => "vaapi",
+            Self::Vdpau => "vdpau",
+            Self::VideoToolbox => "videotoolbox",
+            Self::Vulkan => "vulkan",
+        }
+    }
+
+    /// System's supported hardware decoders
     pub fn supported_devices() -> SupportedDeviceIter {
         SupportedDeviceIter::default()
     }
@@ -104,6 +125,12 @@ impl FromStr for HWDeviceType {
     }
 }
 
+impl fmt::Display for HWDeviceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
 impl From<AVHWDeviceType> for HWDeviceType {
     fn from(value: AVHWDeviceType) -> Self {
         match value {
@@ -131,6 +158,7 @@ impl Default for HWDeviceType {
     }
 }
 
+/// Iterator over system's supported hardware decoders.
 pub struct SupportedDeviceIter {
     current: AVHWDeviceType,
 }
@@ -147,13 +175,36 @@ impl Iterator for SupportedDeviceIter {
     type Item = HWDeviceType;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // None is a sentinel value that indicates the iterator is exhausted
         if self.current == AVHWDeviceType::AV_HWDEVICE_TYPE_NONE {
             None
         } else {
             let prev = self.current;
+            // SAFETY: The docs and examples state that the iterator yields the next value
+            // when the previous is passed in.
             self.current = unsafe { av_hwdevice_iterate_types(prev) };
 
             Some(prev.into())
         }
+    }
+}
+
+impl FusedIterator for SupportedDeviceIter {}
+
+#[cfg(test)]
+mod tests {
+    use std::hint::black_box;
+
+    use super::*;
+
+    // The iterator's yielded values aren't important since hardware decoders vary by system
+    // This is just a sanity check to ensure the iterator works
+    #[test]
+    fn supported_device_iter_doesnt_seg_fault() {
+        for decoder in HWDeviceType::supported_devices() {
+            black_box(decoder);
+        }
+
+        let _decoders: Vec<_> = black_box(HWDeviceType::supported_devices().collect());
     }
 }
