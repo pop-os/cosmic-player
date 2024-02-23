@@ -16,14 +16,12 @@ use cosmic::{
 use std::{
     any::TypeId,
     collections::HashMap,
-    env,
-    path::PathBuf,
-    process,
+    env, process,
     sync::{mpsc, Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use config::{AppTheme, Config, CONFIG_VERSION};
+use config::{AppTheme, Args, Config, CONFIG_VERSION};
 mod config;
 
 use key_bind::{key_binds, KeyBind};
@@ -34,22 +32,34 @@ mod localize;
 use player::{PlayerMessage, VideoFrame, VideoQueue};
 mod player;
 
+mod hardware;
+
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     localize::localize();
+    
+    let mut args = match Args::parse_args() {
+        Ok(args) => args,
+        Err(e) => {
+            log::error!("{e}");
+            process::exit(1);
+        }
+    };
 
     let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
         Ok(config_handler) => {
-            let config = match Config::get_entry(&config_handler) {
+            let mut config = match Config::get_entry(&config_handler) {
                 Ok(ok) => ok,
                 Err((errs, config)) => {
                     log::info!("errors loading config: {:?}", errs);
                     config
                 }
             };
+            // Update config with command line args
+            config.with_args(&mut args);
             (Some(config_handler), config)
         }
         Err(err) => {
@@ -58,16 +68,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    //TODO: support multiple paths
-    let path = match env::args().skip(1).next() {
-        Some(arg) => PathBuf::from(arg),
-        None => {
-            log::error!("no argument provided");
-            process::exit(1);
-        }
-    };
+    //TODO: support using multiple paths
+    let Args { mut paths, .. } = args;
+    let path = paths.pop().unwrap();
 
-    let (player_tx, video_queue_lock) = player::run(path);
+    // TODO: Update video player config when it's updated via the app
+    let (player_tx, video_queue_lock) = player::run(path, config.clone());
 
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
