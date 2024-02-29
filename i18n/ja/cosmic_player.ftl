@@ -1,6 +1,6 @@
 # Context pages
 
-##Settings
+## Settings
 settings = 設定
 
 ### Appearance
