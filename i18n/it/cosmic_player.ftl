@@ -1,11 +1,11 @@
 # Context Pages
 
 ## Settings
-settings = Opzioni
+settings = Impostazioni
 
 ### Appearance
 appearance = Aspetto
 theme = Tema
-match-desktop = Automatico
-dark = Oscuro
+match-desktop = Abbina alla scrivania
+dark = Scuro
 light = Chiaro
