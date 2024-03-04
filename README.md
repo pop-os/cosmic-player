@@ -11,5 +11,5 @@ sudo apt-get install clang just libasound2-dev libavcodec-dev libavdevice-dev li
 
 For Fedora-based rpm systems:
 ```
-sudo dnf install rust cargo alsa-lib-devel clang-devel libavdevice-free-devel libavfilter-free-devel libavformat-free-devel libavutil-free-devel
+sudo dnf install rust cargo alsa-lib-devel clang-devel just libavdevice-free-devel libavfilter-free-devel libavformat-free-devel libavutil-free-devel
 ```
