@@ -11,6 +11,7 @@ Build-Depends:
     libavfilter-dev,
     libavformat-dev,
     libavutil-dev,
+    libxkbcommon-dev,
     pkg-config,
     rust-all,
 Standards-Version: 4.6.2
