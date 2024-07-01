@@ -4,8 +4,8 @@
 settings = Настройки
 
 ### Appearance
-appearance = Внешность
+appearance = Внешний вид
 theme = Тема
-match-desktop = Как система
-dark = Темная
+match-desktop = Как в системе
+dark = Тёмная
 light = Светлая
