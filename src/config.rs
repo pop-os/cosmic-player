@@ -8,7 +8,8 @@ use lexopt::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, process};
 
-use crate::hardware::DeviceType;
+#[cfg(feature = "ffmpeg")]
+use crate::app::hardware::DeviceType;
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -30,8 +31,10 @@ impl AppTheme {
 }
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct Config {
     pub app_theme: AppTheme,
+    #[cfg(feature = "ffmpeg")]
     pub hw_decoder: DeviceType,
 }
 
@@ -39,11 +42,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+            #[cfg(feature = "ffmpeg")]
             hw_decoder: DeviceType::default(),
         }
     }
 }
 
+#[cfg(feature = "ffmpeg")]
 impl Config {
     pub fn with_args(&mut self, args: &mut Args) {
         if let Some(decoder) = args.decoder {
@@ -52,11 +57,13 @@ impl Config {
     }
 }
 
+#[cfg(feature = "ffmpeg")]
 pub struct Args {
     pub paths: Vec<PathBuf>,
     pub decoder: Option<DeviceType>,
 }
 
+#[cfg(feature = "ffmpeg")]
 impl Args {
     pub fn parse_args() -> Result<Self, lexopt::Error> {
         let mut paths = Vec::new();
