@@ -61,6 +61,7 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     }
 
     //TODO: key bindings
+    bind!([], Key::Named(Named::Space), PlayPause);
     bind!([], Key::Named(Named::ArrowLeft), SeekBackward);
     bind!([], Key::Named(Named::ArrowRight), SeekForward);
 

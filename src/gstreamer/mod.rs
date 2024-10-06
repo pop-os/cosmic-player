@@ -71,6 +71,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
+    PlayPause,
     SeekBackward,
     SeekForward,
 }
@@ -78,6 +79,7 @@ pub enum Action {
 impl Action {
     pub fn message(&self) -> Message {
         match self {
+            Self::PlayPause => Message::TogglePause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
         }
@@ -115,6 +117,7 @@ pub struct App {
     key_binds: HashMap<KeyBind, Action>,
     video: Video,
     position: f64,
+    duration: f64,
     dragging: bool,
     audio_codes: Vec<String>,
     current_audio: i32,
@@ -196,12 +199,15 @@ impl Application for App {
         // Flags can be used to enable/disable subtitles
         println!("flags {:?}", pipeline.property_value("flags"));
 
+        let duration = video.duration().as_secs_f64();
+
         let mut app = App {
             core,
             flags,
             key_binds: key_binds(),
             video,
             position: 0.0,
+            duration,
             dragging: false,
             audio_codes,
             current_audio,
@@ -253,20 +259,19 @@ impl Application for App {
                 self.dragging = true;
                 self.position = secs;
                 self.video.set_paused(true);
-                self.video
-                    .seek(Duration::from_secs_f64(self.position), true)
-                    .expect("seek");
+                let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                self.video.seek(duration, true).expect("seek");
             }
             Message::SeekRelative(secs) => {
-                self.video
-                    .seek(Duration::from_secs_f64(self.position + secs), true)
-                    .expect("seek");
+                self.position = self.video.position().as_secs_f64();
+                let duration =
+                    Duration::try_from_secs_f64(self.position + secs).unwrap_or_default();
+                self.video.seek(duration, true).expect("seek");
             }
             Message::SeekRelease => {
                 self.dragging = false;
-                self.video
-                    .seek(Duration::from_secs_f64(self.position), true)
-                    .expect("seek");
+                let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                self.video.seek(duration, true).expect("seek");
                 self.video.set_paused(false);
             }
             Message::EndOfStream => {
@@ -314,10 +319,11 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
-        let format_time = |duration: Duration| -> String {
-            let seconds = duration.as_secs() % 60;
-            let minutes = (duration.as_secs() / 60) % 60;
-            let hours = (duration.as_secs() / 60) / 60;
+        let format_time = |time_float: f64| -> String {
+            let time = time_float.floor() as i64;
+            let seconds = time % 60;
+            let minutes = (time / 60) % 60;
+            let hours = (time / 60) / 60;
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         };
         widget::container(
@@ -343,24 +349,15 @@ impl Application for App {
                             })
                             .on_press(Message::TogglePause),
                         )
+                        .push(widget::text(format_time(self.position)).font(font::mono()))
                         .push(
-                            widget::text(format_time(Duration::from_secs_f64(self.position)))
+                            Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                                .step(0.1)
+                                .on_release(Message::SeekRelease),
+                        )
+                        .push(
+                            widget::text(format_time(self.duration - self.position))
                                 .font(font::mono()),
-                        )
-                        .push(
-                            Slider::new(
-                                0.0..=self.video.duration().as_secs_f64(),
-                                self.position,
-                                Message::Seek,
-                            )
-                            .step(0.1)
-                            .on_release(Message::SeekRelease),
-                        )
-                        .push(
-                            widget::text(format_time(
-                                self.video.duration() - Duration::from_secs_f64(self.position),
-                            ))
-                            .font(font::mono()),
                         ),
                 ),
         )
