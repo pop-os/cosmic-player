@@ -11,6 +11,7 @@ use cosmic::{
         subscription::{self, Subscription},
         Alignment, Length, Limits, Size,
     },
+    theme,
     widget::{self, Column, Row, Slider},
     Application, ApplicationExt, Element,
 };
@@ -127,8 +128,8 @@ impl App {
     }
 
     fn update_title(&mut self) -> Command<Message> {
+        //TODO: filename?
         let title = "COSMIC Media Player";
-        self.set_header_title(title.to_string());
         self.set_window_title(title.to_string())
     }
 }
@@ -156,7 +157,9 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+        core.window.content_container = false;
+
         let video = Video::new(&flags.url).unwrap();
         let pipeline = video.pipeline();
 
@@ -249,10 +252,10 @@ impl Application for App {
             Message::Seek(secs) => {
                 self.dragging = true;
                 self.position = secs;
+                self.video.set_paused(true);
                 self.video
-                    .seek(Duration::from_secs_f64(self.position), false)
+                    .seek(Duration::from_secs_f64(self.position), true)
                     .expect("seek");
-                self.video.set_paused(false);
             }
             Message::SeekRelative(secs) => {
                 self.video
@@ -270,9 +273,7 @@ impl Application for App {
                 println!("end of stream");
             }
             Message::NewFrame => {
-                if self.dragging {
-                    self.video.set_paused(true);
-                } else {
+                if !self.dragging {
                     self.position = self.video.position().as_secs_f64();
                 }
             }
@@ -283,64 +284,84 @@ impl Application for App {
         Command::none()
     }
 
+    fn header_start(&self) -> Vec<Element<Self::Message>> {
+        vec![widget::row::with_children(vec![
+            //TODO: allow mute/unmute/change volume
+            widget::icon::from_name("audio-volume-high-symbolic")
+                .size(16)
+                .into(),
+            widget::dropdown(
+                &self.audio_codes,
+                usize::try_from(self.current_audio).ok(),
+                Message::AudioCode,
+            )
+            .into(),
+            //TODO: allow toggling subtitles
+            widget::icon::from_name("media-view-subtitles-symbolic")
+                .size(16)
+                .into(),
+            widget::dropdown(
+                &self.text_codes,
+                usize::try_from(self.current_text).ok(),
+                Message::TextCode,
+            )
+            .into(),
+        ])
+        .align_items(Alignment::Center)
+        .spacing(8)
+        .into()]
+    }
+
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
-        Column::new()
-            .push(widget::vertical_space(Length::Fill))
-            .push(
-                VideoPlayer::new(&self.video)
-                    .on_end_of_stream(Message::EndOfStream)
-                    .on_new_frame(Message::NewFrame)
-                    .width(Length::Fill),
-            )
-            .push(widget::vertical_space(Length::Fill))
-            .push(
-                Row::new()
-                    .align_items(Alignment::Center)
-                    .height(Length::Fixed(32.0))
-                    .spacing(8)
-                    .push(
-                        widget::button::icon(if self.video.paused() {
-                            widget::icon::from_name("media-playback-start-symbolic").size(16)
-                        } else {
-                            widget::icon::from_name("media-playback-pause-symbolic").size(16)
-                        })
-                        .on_press(Message::TogglePause),
-                    )
-                    .push(
-                        //TODO: allow mute/unmute/change volume
-                        widget::icon::from_name("audio-volume-high-symbolic").size(16),
-                    )
-                    .push(widget::dropdown(
-                        &self.audio_codes,
-                        usize::try_from(self.current_audio).ok(),
-                        Message::AudioCode,
-                    ))
-                    .push(
-                        //TODO: allow toggling subtitles
-                        widget::icon::from_name("media-view-subtitles-symbolic").size(16),
-                    )
-                    .push(widget::dropdown(
-                        &self.text_codes,
-                        usize::try_from(self.current_text).ok(),
-                        Message::TextCode,
-                    ))
-                    .push(widget::text(format!(
-                        "{:#?}s / {:#?}s",
-                        self.position as u64,
-                        self.video.duration().as_secs()
-                    )))
-                    .push(
-                        Slider::new(
-                            0.0..=self.video.duration().as_secs_f64(),
-                            self.position,
-                            Message::Seek,
+        let format_time = |duration: Duration| -> String {
+            let seconds = duration.as_secs() % 60;
+            let minutes = (duration.as_secs() / 60) % 60;
+            let hours = (duration.as_secs() / 60) / 60;
+            format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
+        };
+        widget::container(
+            Column::new()
+                .push(widget::vertical_space(Length::Fill))
+                .push(
+                    VideoPlayer::new(&self.video)
+                        .on_end_of_stream(Message::EndOfStream)
+                        .on_new_frame(Message::NewFrame)
+                        .width(Length::Fill),
+                )
+                .push(widget::vertical_space(Length::Fill))
+                .push(
+                    Row::new()
+                        .align_items(Alignment::Center)
+                        .spacing(8)
+                        .padding([0, 8])
+                        .push(
+                            widget::button::icon(if self.video.paused() {
+                                widget::icon::from_name("media-playback-start-symbolic").size(16)
+                            } else {
+                                widget::icon::from_name("media-playback-pause-symbolic").size(16)
+                            })
+                            .on_press(Message::TogglePause),
                         )
-                        .step(0.1)
-                        .on_release(Message::SeekRelease),
-                    ),
-            )
-            .into()
+                        .push(widget::text(format_time(Duration::from_secs_f64(
+                            self.position,
+                        ))))
+                        .push(
+                            Slider::new(
+                                0.0..=self.video.duration().as_secs_f64(),
+                                self.position,
+                                Message::Seek,
+                            )
+                            .step(0.1)
+                            .on_release(Message::SeekRelease),
+                        )
+                        .push(widget::text(format_time(
+                            self.video.duration() - Duration::from_secs_f64(self.position),
+                        ))),
+                ),
+        )
+        .style(theme::Container::WindowBackground)
+        .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
