@@ -9,7 +9,7 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        Alignment, Length, Limits, Size,
+        window, Alignment, Color, Length, Limits, Size,
     },
     theme,
     widget::{self, Column, Row, Slider},
@@ -97,6 +97,7 @@ pub struct Flags {
 #[derive(Clone, Debug)]
 pub enum Message {
     Config(Config),
+    Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
     TextCode(usize),
@@ -114,6 +115,7 @@ pub enum Message {
 pub struct App {
     core: Core,
     flags: Flags,
+    fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
     video: Video,
     position: f64,
@@ -204,6 +206,7 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
+            fullscreen: false,
             key_binds: key_binds(),
             video,
             position: 0.0,
@@ -218,6 +221,14 @@ impl Application for App {
         (app, command)
     }
 
+    fn on_escape(&mut self) -> Command<Self::Message> {
+        if self.fullscreen {
+            return self.update(Message::Fullscreen);
+        } else {
+            Command::none()
+        }
+    }
+
     /// Handle application events here.
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
@@ -227,6 +238,18 @@ impl Application for App {
                     self.flags.config = config;
                     return self.update_config();
                 }
+            }
+            Message::Fullscreen => {
+                self.fullscreen = !self.fullscreen;
+                self.core.window.show_headerbar = !self.fullscreen;
+                return window::change_mode(
+                    window::Id::MAIN,
+                    if self.fullscreen {
+                        window::Mode::Fullscreen
+                    } else {
+                        window::Mode::Windowed
+                    },
+                );
             }
             Message::Key(modifiers, key) => {
                 for (key_bind, action) in self.key_binds.iter() {
@@ -311,6 +334,9 @@ impl Application for App {
                 Message::TextCode,
             )
             .into(),
+            widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic").size(16))
+                .on_press(Message::Fullscreen)
+                .into(),
         ])
         .align_items(Alignment::Center)
         .spacing(8)
@@ -326,17 +352,20 @@ impl Application for App {
             let hours = (time / 60) / 60;
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         };
-        widget::container(
-            Column::new()
-                .push(widget::vertical_space(Length::Fill))
-                .push(
-                    VideoPlayer::new(&self.video)
-                        .on_end_of_stream(Message::EndOfStream)
-                        .on_new_frame(Message::NewFrame)
-                        .width(Length::Fill),
-                )
-                .push(widget::vertical_space(Length::Fill))
-                .push(
+
+        let mut column = widget::column::with_capacity(4)
+            .push(widget::vertical_space(Length::Fill))
+            .push(
+                VideoPlayer::new(&self.video)
+                    .on_end_of_stream(Message::EndOfStream)
+                    .on_new_frame(Message::NewFrame)
+                    .width(Length::Fill),
+            )
+            .push(widget::vertical_space(Length::Fill));
+
+        if !self.fullscreen {
+            column = column.push(
+                widget::container(
                     Row::new()
                         .align_items(Alignment::Center)
                         .spacing(8)
@@ -359,10 +388,16 @@ impl Application for App {
                             widget::text(format_time(self.duration - self.position))
                                 .font(font::mono()),
                         ),
-                ),
-        )
-        .style(theme::Container::WindowBackground)
-        .into()
+                )
+                .style(theme::Container::WindowBackground),
+            );
+        }
+
+        widget::container(column)
+            .style(theme::Container::Custom(Box::new(|_theme| {
+                widget::container::Appearance::default().with_background(Color::BLACK)
+            })))
+            .into()
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
