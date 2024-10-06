@@ -4,7 +4,7 @@
 use cosmic::{
     app::{Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
-    cosmic_theme, executor,
+    cosmic_theme, executor, font,
     iced::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
@@ -343,9 +343,10 @@ impl Application for App {
                             })
                             .on_press(Message::TogglePause),
                         )
-                        .push(widget::text(format_time(Duration::from_secs_f64(
-                            self.position,
-                        ))))
+                        .push(
+                            widget::text(format_time(Duration::from_secs_f64(self.position)))
+                                .font(font::mono()),
+                        )
                         .push(
                             Slider::new(
                                 0.0..=self.video.duration().as_secs_f64(),
@@ -355,9 +356,12 @@ impl Application for App {
                             .step(0.1)
                             .on_release(Message::SeekRelease),
                         )
-                        .push(widget::text(format_time(
-                            self.video.duration() - Duration::from_secs_f64(self.position),
-                        ))),
+                        .push(
+                            widget::text(format_time(
+                                self.video.duration() - Duration::from_secs_f64(self.position),
+                            ))
+                            .font(font::mono()),
+                        ),
                 ),
         )
         .style(theme::Container::WindowBackground)
