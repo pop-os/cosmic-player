@@ -9,7 +9,7 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         subscription::{self, Subscription},
-        Length, Limits, Size,
+        Alignment, Length, Limits, Size,
     },
     widget::{self, Column, Row, Slider},
     Application, ApplicationExt, Element,
@@ -95,6 +95,8 @@ pub struct Flags {
 pub enum Message {
     Config(Config),
     Key(Modifiers, Key),
+    AudioCode(usize),
+    TextCode(usize),
     TogglePause,
     ToggleLoop,
     Seek(f64),
@@ -113,6 +115,10 @@ pub struct App {
     video: Video,
     position: f64,
     dragging: bool,
+    audio_codes: Vec<String>,
+    current_audio: i32,
+    text_codes: Vec<String>,
+    current_text: i32,
 }
 
 impl App {
@@ -159,6 +165,7 @@ impl Application for App {
         let mut audio_codes = Vec::with_capacity(n_audio as usize);
         for i in 0..n_audio {
             let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
+            println!("audio stream {}: {:?}", i, tags);
             audio_codes.push(
                 if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
                     language_code.get().to_string()
@@ -167,13 +174,13 @@ impl Application for App {
                 },
             );
         }
-        println!("audio language codes: {:#?}", audio_codes);
 
         let current_text = pipeline.property::<i32>("current-text");
         let n_text = pipeline.property::<i32>("n-text");
         let mut text_codes = Vec::with_capacity(n_text as usize);
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
+            println!("text stream {}: {:?}", i, tags);
             text_codes.push(
                 if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
                     language_code.get().to_string()
@@ -182,7 +189,6 @@ impl Application for App {
                 },
             );
         }
-        println!("text language codes: {:#?}", text_codes);
 
         // Flags can be used to enable/disable subtitles
         println!("flags {:?}", pipeline.property_value("flags"));
@@ -194,6 +200,10 @@ impl Application for App {
             video,
             position: 0.0,
             dragging: false,
+            audio_codes,
+            current_audio,
+            text_codes,
+            current_text,
         };
         let command = app.update_title();
         (app, command)
@@ -214,6 +224,20 @@ impl Application for App {
                     if key_bind.matches(modifiers, &key) {
                         return self.update(action.message());
                     }
+                }
+            }
+            Message::AudioCode(code) => {
+                if let Ok(code) = i32::try_from(code) {
+                    let pipeline = self.video.pipeline();
+                    pipeline.set_property("current-audio", code);
+                    self.current_audio = pipeline.property("current-audio");
+                }
+            }
+            Message::TextCode(code) => {
+                if let Ok(code) = i32::try_from(code) {
+                    let pipeline = self.video.pipeline();
+                    pipeline.set_property("current-text", code);
+                    self.current_text = pipeline.property("current-text");
                 }
             }
             Message::TogglePause => {
@@ -272,7 +296,8 @@ impl Application for App {
             .push(widget::vertical_space(Length::Fill))
             .push(
                 Row::new()
-                    .height(Length::Fixed(16.0))
+                    .align_items(Alignment::Center)
+                    .height(Length::Fixed(32.0))
                     .spacing(8)
                     .push(
                         widget::button::icon(if self.video.paused() {
@@ -282,6 +307,24 @@ impl Application for App {
                         })
                         .on_press(Message::TogglePause),
                     )
+                    .push(
+                        //TODO: allow mute/unmute/change volume
+                        widget::icon::from_name("audio-volume-high-symbolic").size(16),
+                    )
+                    .push(widget::dropdown(
+                        &self.audio_codes,
+                        usize::try_from(self.current_audio).ok(),
+                        Message::AudioCode,
+                    ))
+                    .push(
+                        //TODO: allow toggling subtitles
+                        widget::icon::from_name("media-view-subtitles-symbolic").size(16),
+                    )
+                    .push(widget::dropdown(
+                        &self.text_codes,
+                        usize::try_from(self.current_text).ok(),
+                        Message::TextCode,
+                    ))
                     .push(widget::text(format!(
                         "{:#?}s / {:#?}s",
                         self.position as u64,
