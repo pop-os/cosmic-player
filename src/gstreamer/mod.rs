@@ -14,7 +14,10 @@ use cosmic::{
     widget::{self, Column, Row, Slider},
     Application, ApplicationExt, Element,
 };
-use iced_video_player::{Video, VideoPlayer};
+use iced_video_player::{
+    gst::{self, prelude::*},
+    Video, VideoPlayer,
+};
 use std::{any::TypeId, collections::HashMap, time::Duration};
 
 use crate::{
@@ -149,6 +152,41 @@ impl Application for App {
     /// Creates the application, and optionally emits command on initialize.
     fn init(core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         let video = Video::new(&flags.url).unwrap();
+        let pipeline = video.pipeline();
+
+        let current_audio = pipeline.property::<i32>("current-audio");
+        let n_audio = pipeline.property::<i32>("n-audio");
+        let mut audio_codes = Vec::with_capacity(n_audio as usize);
+        for i in 0..n_audio {
+            let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
+            audio_codes.push(
+                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    language_code.get().to_string()
+                } else {
+                    String::new()
+                },
+            );
+        }
+        println!("audio language codes: {:#?}", audio_codes);
+
+        let current_text = pipeline.property::<i32>("current-text");
+        let n_text = pipeline.property::<i32>("n-text");
+        let mut text_codes = Vec::with_capacity(n_text as usize);
+        for i in 0..n_text {
+            let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
+            text_codes.push(
+                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    language_code.get().to_string()
+                } else {
+                    String::new()
+                },
+            );
+        }
+        println!("text language codes: {:#?}", text_codes);
+
+        // Flags can be used to enable/disable subtitles
+        println!("flags {:?}", pipeline.property_value("flags"));
+
         let mut app = App {
             core,
             flags,
