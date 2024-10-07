@@ -30,7 +30,6 @@ optional = true
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
 features = ["tokio", "winit"]
-#path = "../libcosmic"
 
 [dependencies.smol_str]
 version = "0.2.1"
@@ -45,3 +44,8 @@ wgpu = ["libcosmic/wgpu"]
 [profile.release-with-debug]
 inherits = "release"
 debug = true
+
+# [patch.'https://github.com/pop-os/libcosmic']
+# libcosmic = { path = "../libcosmic" }
+# cosmic-config = { path = "../libcosmic/cosmic-config" }
+# cosmic-theme = { path = "../libcosmic/cosmic-theme" }

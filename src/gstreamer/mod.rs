@@ -12,7 +12,7 @@ use cosmic::{
         window, Alignment, Color, Length, Limits, Size,
     },
     theme,
-    widget::{self, Column, Row, Slider},
+    widget::{self, Slider},
     Application, ApplicationExt, Element,
 };
 use iced_video_player::{
@@ -434,25 +434,27 @@ impl Application for App {
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         };
 
-        let mut column = widget::column::with_capacity(4);
-        column = column.push(widget::vertical_space(Length::Fill));
-        if let Some(video) = &self.video_opt {
-            column = column.push(
-                VideoPlayer::new(video)
-                    .on_end_of_stream(Message::EndOfStream)
-                    .on_missing_plugin(Message::MissingPlugin)
-                    .on_new_frame(Message::NewFrame)
-                    .width(Length::Fill)
-                    .height(Length::Fill),
-            );
-        }
-        //TODO: open button if no video?
-        column = column.push(widget::vertical_space(Length::Fill));
+        let Some(video) = &self.video_opt else {
+            //TODO: open button if no video?
+            return widget::container(widget::text("No video open"))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(theme::Container::WindowBackground)
+                .into();
+        };
 
+        let video_player = VideoPlayer::new(video)
+            .on_end_of_stream(Message::EndOfStream)
+            .on_missing_plugin(Message::MissingPlugin)
+            .on_new_frame(Message::NewFrame)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        let mut popover = widget::popover(video_player).position(widget::popover::Position::Bottom);
         if !self.fullscreen {
-            column = column.push(
+            popover = popover.popup(
                 widget::container(
-                    Row::new()
+                    widget::row::with_capacity(4)
                         .align_items(Alignment::Center)
                         .spacing(8)
                         .padding([0, 8])
@@ -483,7 +485,9 @@ impl Application for App {
             );
         }
 
-        widget::container(column)
+        widget::container(popover)
+            .width(Length::Fill)
+            .height(Length::Fill)
             .style(theme::Container::Custom(Box::new(|_theme| {
                 widget::container::Appearance::default().with_background(Color::BLACK)
             })))
