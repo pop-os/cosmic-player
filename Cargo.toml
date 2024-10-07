@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-cpal = "0.15"
-ffmpeg-next = { version = "6", optional = true }
 lazy_static = "1"
 paste = "1"
 serde = { version = "1", features = ["serde_derive"] }
 tokio = "1"
 url = "2"
+# ffmpeg
+cpal = { version = "0.15", optional = true }
+ffmpeg-next = { version = "6", optional = true }
 # Internationalization
 i18n-embed = { version = "0.13", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.6"
@@ -37,7 +38,7 @@ features = ["serde"]
 
 [features]
 default = ["gstreamer", "wgpu"]
-ffmpeg = ["dep:ffmpeg-next"]
+ffmpeg = ["dep:cpal", "dep:ffmpeg-next"]
 gstreamer = ["dep:iced_video_player", "wgpu"]
 wgpu = ["libcosmic/wgpu"]
 
