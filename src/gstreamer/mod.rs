@@ -9,8 +9,8 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
-        subscription::{self, Subscription},
-        window, Alignment, Color, Length, Limits, Size,
+        subscription::Subscription,
+        window, Alignment, Color, Length, Limits,
     },
     theme,
     widget::{self, Slider},
@@ -86,7 +86,7 @@ pub enum Action {
 impl Action {
     pub fn message(&self) -> Message {
         match self {
-            Self::PlayPause => Message::TogglePause,
+            Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
         }
@@ -108,8 +108,7 @@ pub enum Message {
     Key(Modifiers, Key),
     AudioCode(usize),
     TextCode(usize),
-    TogglePause,
-    ToggleLoop,
+    PlayPause,
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
@@ -323,15 +322,10 @@ impl Application for App {
                     }
                 }
             }
-            Message::TogglePause => {
+            Message::PlayPause => {
                 if let Some(video) = &mut self.video_opt {
                     video.set_paused(!video.paused());
                     self.update_controls(true);
-                }
-            }
-            Message::ToggleLoop => {
-                if let Some(video) = &mut self.video_opt {
-                    video.set_looping(!video.looping());
                 }
             }
             Message::Seek(secs) => {
@@ -466,6 +460,7 @@ impl Application for App {
         };
 
         let video_player = VideoPlayer::new(video)
+            .mouse_hidden(!self.controls)
             .on_end_of_stream(Message::EndOfStream)
             .on_missing_plugin(Message::MissingPlugin)
             .on_new_frame(Message::NewFrame)
@@ -492,7 +487,7 @@ impl Application for App {
                                         .size(16)
                                 },
                             )
-                            .on_press(Message::TogglePause),
+                            .on_press(Message::PlayPause),
                         )
                         .push(widget::text(format_time(self.position)).font(font::mono()))
                         .push(
