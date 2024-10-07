@@ -45,7 +45,11 @@ wgpu = ["libcosmic/wgpu"]
 inherits = "release"
 debug = true
 
+# [patch.'https://github.com/jackpot51/iced_video_player']
+# iced_video_player = { path = "../../iced_video_player" }
+
 # [patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+
