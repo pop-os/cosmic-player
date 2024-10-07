@@ -8,6 +8,7 @@ use cosmic::{
     iced::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
+        mouse::Event as MouseEvent,
         subscription::{self, Subscription},
         window, Alignment, Color, Length, Limits, Size,
     },
@@ -19,13 +20,19 @@ use iced_video_player::{
     gst::{self, prelude::*},
     gst_pbutils, Video, VideoPlayer,
 };
-use std::{any::TypeId, collections::HashMap, time::Duration};
+use std::{
+    any::TypeId,
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use crate::{
     config::{Config, CONFIG_VERSION},
     key_bind::{key_binds, KeyBind},
     localize,
 };
+
+static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
 /// Runs application with these settings
 #[rustfmt::skip]
@@ -110,6 +117,7 @@ pub enum Message {
     MissingPlugin(gst::Message),
     NewFrame,
     Reload,
+    ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
 }
 
@@ -117,6 +125,8 @@ pub enum Message {
 pub struct App {
     core: Core,
     flags: Flags,
+    controls: bool,
+    controls_time: Instant,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
     video_opt: Option<Video>,
@@ -159,12 +169,12 @@ impl App {
         self.audio_codes = Vec::with_capacity(n_audio as usize);
         for i in 0..n_audio {
             let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
-            println!("audio stream {}: {:?}", i, tags);
+            log::info!("audio stream {i}: {tags:?}");
             self.audio_codes.push(
                 if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
                     language_code.get().to_string()
                 } else {
-                    String::new()
+                    format!("Audio #{i}")
                 },
             );
         }
@@ -174,12 +184,12 @@ impl App {
         self.text_codes = Vec::with_capacity(n_text as usize);
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
-            println!("text stream {}: {:?}", i, tags);
+            log::info!("text stream {i}: {tags:?}");
             self.text_codes.push(
                 if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
                     language_code.get().to_string()
                 } else {
-                    String::new()
+                    format!("Subtitle #{i}")
                 },
             );
         }
@@ -189,6 +199,15 @@ impl App {
         println!("flags {:?}", pipeline.property_value("flags"));
 
         self.update_title()
+    }
+
+    fn update_controls(&mut self, in_use: bool) {
+        if in_use {
+            self.controls = true;
+            self.controls_time = Instant::now();
+        } else if self.controls && self.controls_time.elapsed() > CONTROLS_TIMEOUT {
+            self.controls = false;
+        }
     }
 
     fn update_config(&mut self) -> Command<Message> {
@@ -231,6 +250,8 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
+            controls: true,
+            controls_time: Instant::now(),
             fullscreen: false,
             key_binds: key_binds(),
             video_opt: None,
@@ -305,6 +326,7 @@ impl Application for App {
             Message::TogglePause => {
                 if let Some(video) = &mut self.video_opt {
                     video.set_paused(!video.paused());
+                    self.update_controls(true);
                 }
             }
             Message::ToggleLoop => {
@@ -319,6 +341,7 @@ impl Application for App {
                     video.set_paused(true);
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
+                    self.update_controls(true);
                 }
             }
             Message::SeekRelative(secs) => {
@@ -335,6 +358,7 @@ impl Application for App {
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
                     video.set_paused(false);
+                    self.update_controls(true);
                 }
             }
             Message::EndOfStream => {
@@ -377,14 +401,18 @@ impl Application for App {
                 );
             }
             Message::NewFrame => {
-                if !self.dragging {
-                    if let Some(video) = &self.video_opt {
+                if let Some(video) = &self.video_opt {
+                    if !self.dragging {
                         self.position = video.position().as_secs_f64();
+                        self.update_controls(false);
                     }
                 }
             }
             Message::Reload => {
                 return self.load();
+            }
+            Message::ShowControls => {
+                self.update_controls(true);
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
@@ -394,34 +422,28 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![widget::row::with_children(vec![
+        let mut row = widget::row::with_capacity(4)
+            .align_items(Alignment::Center)
+            .spacing(8);
+        if !self.audio_codes.is_empty() {
             //TODO: allow mute/unmute/change volume
-            widget::icon::from_name("audio-volume-high-symbolic")
-                .size(16)
-                .into(),
-            widget::dropdown(
+            row = row.push(widget::icon::from_name("audio-volume-high-symbolic").size(16));
+            row = row.push(widget::dropdown(
                 &self.audio_codes,
                 usize::try_from(self.current_audio).ok(),
                 Message::AudioCode,
-            )
-            .into(),
+            ));
+        }
+        if !self.text_codes.is_empty() {
             //TODO: allow toggling subtitles
-            widget::icon::from_name("media-view-subtitles-symbolic")
-                .size(16)
-                .into(),
-            widget::dropdown(
+            row = row.push(widget::icon::from_name("media-view-subtitles-symbolic").size(16));
+            row = row.push(widget::dropdown(
                 &self.text_codes,
                 usize::try_from(self.current_text).ok(),
                 Message::TextCode,
-            )
-            .into(),
-            widget::button::icon(widget::icon::from_name("view-fullscreen-symbolic").size(16))
-                .on_press(Message::Fullscreen)
-                .into(),
-        ])
-        .align_items(Alignment::Center)
-        .spacing(8)
-        .into()]
+            ));
+        }
+        vec![row.into()]
     }
 
     /// Creates a view after each update.
@@ -450,11 +472,13 @@ impl Application for App {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let mut popover = widget::popover(video_player).position(widget::popover::Position::Bottom);
-        if !self.fullscreen {
+        let mouse_area = widget::mouse_area(video_player).on_double_press(Message::Fullscreen);
+
+        let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
+        if self.controls {
             popover = popover.popup(
                 widget::container(
-                    widget::row::with_capacity(4)
+                    widget::row::with_capacity(5)
                         .align_items(Alignment::Center)
                         .spacing(8)
                         .padding([0, 8])
@@ -479,6 +503,12 @@ impl Application for App {
                         .push(
                             widget::text(format_time(self.duration - self.position))
                                 .font(font::mono()),
+                        )
+                        .push(
+                            widget::button::icon(
+                                widget::icon::from_name("view-fullscreen-symbolic").size(16),
+                            )
+                            .on_press(Message::Fullscreen),
                         ),
                 )
                 .style(theme::Container::WindowBackground),
@@ -503,6 +533,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
                     Some(Message::Key(modifiers, key))
                 }
+                Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
                 _ => None,
             }),
             cosmic_config::config_subscription(
