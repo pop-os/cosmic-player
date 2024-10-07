@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{Command, Core, Settings},
+    app::{message, Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor, font,
     iced::{
@@ -17,7 +17,7 @@ use cosmic::{
 };
 use iced_video_player::{
     gst::{self, prelude::*},
-    Video, VideoPlayer,
+    gst_pbutils, Video, VideoPlayer,
 };
 use std::{any::TypeId, collections::HashMap, time::Duration};
 
@@ -107,7 +107,9 @@ pub enum Message {
     SeekRelative(f64),
     SeekRelease,
     EndOfStream,
+    MissingPlugin(gst::Message),
     NewFrame,
+    Reload,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
 }
 
@@ -117,7 +119,7 @@ pub struct App {
     flags: Flags,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
-    video: Video,
+    video_opt: Option<Video>,
     position: f64,
     duration: f64,
     dragging: bool,
@@ -128,6 +130,67 @@ pub struct App {
 }
 
 impl App {
+    fn close(&mut self) {
+        self.video_opt = None;
+        self.position = 0.0;
+        self.duration = 0.0;
+        self.dragging = false;
+        self.audio_codes = Vec::new();
+        self.current_audio = -1;
+        self.text_codes = Vec::new();
+        self.current_text = -1;
+    }
+
+    fn load(&mut self) -> Command<Message> {
+        self.close();
+
+        let video = match Video::new(&self.flags.url) {
+            Ok(ok) => ok,
+            Err(err) => {
+                log::warn!("failed to open {:?}: {err}", self.flags.url);
+                return Command::none();
+            }
+        };
+        self.duration = video.duration().as_secs_f64();
+        let pipeline = video.pipeline();
+        self.video_opt = Some(video);
+
+        let n_audio = pipeline.property::<i32>("n-audio");
+        self.audio_codes = Vec::with_capacity(n_audio as usize);
+        for i in 0..n_audio {
+            let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
+            println!("audio stream {}: {:?}", i, tags);
+            self.audio_codes.push(
+                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    language_code.get().to_string()
+                } else {
+                    String::new()
+                },
+            );
+        }
+        self.current_audio = pipeline.property::<i32>("current-audio");
+
+        let n_text = pipeline.property::<i32>("n-text");
+        self.text_codes = Vec::with_capacity(n_text as usize);
+        for i in 0..n_text {
+            let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
+            println!("text stream {}: {:?}", i, tags);
+            self.text_codes.push(
+                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    language_code.get().to_string()
+                } else {
+                    String::new()
+                },
+            );
+        }
+        self.current_text = pipeline.property::<i32>("current-text");
+
+        //TODO: Flags can be used to enable/disable subtitles
+        println!("flags {:?}", pipeline.property_value("flags"));
+
+        self.update_title()
+    }
+
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
     }
@@ -165,59 +228,22 @@ impl Application for App {
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         core.window.content_container = false;
 
-        let video = Video::new(&flags.url).unwrap();
-        let pipeline = video.pipeline();
-
-        let current_audio = pipeline.property::<i32>("current-audio");
-        let n_audio = pipeline.property::<i32>("n-audio");
-        let mut audio_codes = Vec::with_capacity(n_audio as usize);
-        for i in 0..n_audio {
-            let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
-            println!("audio stream {}: {:?}", i, tags);
-            audio_codes.push(
-                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
-                    language_code.get().to_string()
-                } else {
-                    String::new()
-                },
-            );
-        }
-
-        let current_text = pipeline.property::<i32>("current-text");
-        let n_text = pipeline.property::<i32>("n-text");
-        let mut text_codes = Vec::with_capacity(n_text as usize);
-        for i in 0..n_text {
-            let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
-            println!("text stream {}: {:?}", i, tags);
-            text_codes.push(
-                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
-                    language_code.get().to_string()
-                } else {
-                    String::new()
-                },
-            );
-        }
-
-        // Flags can be used to enable/disable subtitles
-        println!("flags {:?}", pipeline.property_value("flags"));
-
-        let duration = video.duration().as_secs_f64();
-
         let mut app = App {
             core,
             flags,
             fullscreen: false,
             key_binds: key_binds(),
-            video,
+            video_opt: None,
             position: 0.0,
-            duration,
+            duration: 0.0,
             dragging: false,
-            audio_codes,
-            current_audio,
-            text_codes,
-            current_text,
+            audio_codes: Vec::new(),
+            current_audio: -1,
+            text_codes: Vec::new(),
+            current_text: -1,
         };
-        let command = app.update_title();
+
+        let command = app.load();
         (app, command)
     }
 
@@ -260,50 +286,105 @@ impl Application for App {
             }
             Message::AudioCode(code) => {
                 if let Ok(code) = i32::try_from(code) {
-                    let pipeline = self.video.pipeline();
-                    pipeline.set_property("current-audio", code);
-                    self.current_audio = pipeline.property("current-audio");
+                    if let Some(video) = &self.video_opt {
+                        let pipeline = video.pipeline();
+                        pipeline.set_property("current-audio", code);
+                        self.current_audio = pipeline.property("current-audio");
+                    }
                 }
             }
             Message::TextCode(code) => {
                 if let Ok(code) = i32::try_from(code) {
-                    let pipeline = self.video.pipeline();
-                    pipeline.set_property("current-text", code);
-                    self.current_text = pipeline.property("current-text");
+                    if let Some(video) = &self.video_opt {
+                        let pipeline = video.pipeline();
+                        pipeline.set_property("current-text", code);
+                        self.current_text = pipeline.property("current-text");
+                    }
                 }
             }
             Message::TogglePause => {
-                self.video.set_paused(!self.video.paused());
+                if let Some(video) = &mut self.video_opt {
+                    video.set_paused(!video.paused());
+                }
             }
             Message::ToggleLoop => {
-                self.video.set_looping(!self.video.looping());
+                if let Some(video) = &mut self.video_opt {
+                    video.set_looping(!video.looping());
+                }
             }
             Message::Seek(secs) => {
-                self.dragging = true;
-                self.position = secs;
-                self.video.set_paused(true);
-                let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
-                self.video.seek(duration, true).expect("seek");
+                if let Some(video) = &mut self.video_opt {
+                    self.dragging = true;
+                    self.position = secs;
+                    video.set_paused(true);
+                    let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                    video.seek(duration, true).expect("seek");
+                }
             }
             Message::SeekRelative(secs) => {
-                self.position = self.video.position().as_secs_f64();
-                let duration =
-                    Duration::try_from_secs_f64(self.position + secs).unwrap_or_default();
-                self.video.seek(duration, true).expect("seek");
+                if let Some(video) = &mut self.video_opt {
+                    self.position = video.position().as_secs_f64();
+                    let duration =
+                        Duration::try_from_secs_f64(self.position + secs).unwrap_or_default();
+                    video.seek(duration, true).expect("seek");
+                }
             }
             Message::SeekRelease => {
-                self.dragging = false;
-                let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
-                self.video.seek(duration, true).expect("seek");
-                self.video.set_paused(false);
+                if let Some(video) = &mut self.video_opt {
+                    self.dragging = false;
+                    let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                    video.seek(duration, true).expect("seek");
+                    video.set_paused(false);
+                }
             }
             Message::EndOfStream => {
                 println!("end of stream");
             }
+            Message::MissingPlugin(element) => {
+                if let Some(video) = &mut self.video_opt {
+                    video.set_paused(true);
+                }
+                return Command::perform(
+                    async move {
+                        tokio::task::spawn_blocking(move || {
+                            match gst_pbutils::MissingPluginMessage::parse(&element) {
+                                Ok(missing_plugin) => {
+                                    let mut install_ctx = gst_pbutils::InstallPluginsContext::new();
+                                    install_ctx
+                                        .set_desktop_id(&format!("{}.desktop", Self::APP_ID));
+                                    let install_detail = missing_plugin.installer_detail();
+                                    println!("installing plugins: {}", install_detail);
+                                    let status = gst_pbutils::missing_plugins::install_plugins_sync(
+                                        &[&install_detail],
+                                        Some(&install_ctx),
+                                    );
+                                    log::info!("plugin install status: {}", status);
+                                    log::info!(
+                                        "gstreamer registry update: {:?}",
+                                        gst::Registry::update()
+                                    );
+                                }
+                                Err(err) => {
+                                    log::warn!("failed to parse missing plugin message: {err}");
+                                }
+                            }
+                            message::app(Message::Reload)
+                        })
+                        .await
+                        .unwrap()
+                    },
+                    |x| x,
+                );
+            }
             Message::NewFrame => {
                 if !self.dragging {
-                    self.position = self.video.position().as_secs_f64();
+                    if let Some(video) = &self.video_opt {
+                        self.position = video.position().as_secs_f64();
+                    }
                 }
+            }
+            Message::Reload => {
+                return self.load();
             }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
@@ -353,15 +434,20 @@ impl Application for App {
             format!("{:02}:{:02}:{:02}", hours, minutes, seconds)
         };
 
-        let mut column = widget::column::with_capacity(4)
-            .push(widget::vertical_space(Length::Fill))
-            .push(
-                VideoPlayer::new(&self.video)
+        let mut column = widget::column::with_capacity(4);
+        column = column.push(widget::vertical_space(Length::Fill));
+        if let Some(video) = &self.video_opt {
+            column = column.push(
+                VideoPlayer::new(video)
                     .on_end_of_stream(Message::EndOfStream)
+                    .on_missing_plugin(Message::MissingPlugin)
                     .on_new_frame(Message::NewFrame)
-                    .width(Length::Fill),
-            )
-            .push(widget::vertical_space(Length::Fill));
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            );
+        }
+        //TODO: open button if no video?
+        column = column.push(widget::vertical_space(Length::Fill));
 
         if !self.fullscreen {
             column = column.push(
@@ -371,11 +457,15 @@ impl Application for App {
                         .spacing(8)
                         .padding([0, 8])
                         .push(
-                            widget::button::icon(if self.video.paused() {
-                                widget::icon::from_name("media-playback-start-symbolic").size(16)
-                            } else {
-                                widget::icon::from_name("media-playback-pause-symbolic").size(16)
-                            })
+                            widget::button::icon(
+                                if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                                    widget::icon::from_name("media-playback-start-symbolic")
+                                        .size(16)
+                                } else {
+                                    widget::icon::from_name("media-playback-pause-symbolic")
+                                        .size(16)
+                                },
+                            )
                             .on_press(Message::TogglePause),
                         )
                         .push(widget::text(format_time(self.position)).font(font::mono()))
