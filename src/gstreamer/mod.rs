@@ -34,6 +34,10 @@ use crate::{
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
+const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
+const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
+const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
+
 /// Runs application with these settings
 #[rustfmt::skip]
 pub fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -78,6 +82,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
+    Fullscreen,
     PlayPause,
     SeekBackward,
     SeekForward,
@@ -86,6 +91,7 @@ pub enum Action {
 impl Action {
     pub fn message(&self) -> Message {
         match self {
+            Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
@@ -195,7 +201,29 @@ impl App {
         self.current_text = pipeline.property::<i32>("current-text");
 
         //TODO: Flags can be used to enable/disable subtitles
-        println!("flags {:?}", pipeline.property_value("flags"));
+        let flags_value = pipeline.property_value("flags");
+        println!("original flags {:?}", flags_value);
+        match flags_value.transform::<i32>() {
+            Ok(flags_transform) => match flags_transform.get::<i32>() {
+                Ok(mut flags) => {
+                    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+                    flags &= !GST_PLAY_FLAG_TEXT;
+                    match gst::glib::Value::from(flags).transform_with_type(flags_value.type_()) {
+                        Ok(value) => pipeline.set_property("flags", value),
+                        Err(err) => {
+                            log::warn!("failed to transform int to flags: {err}");
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!("failed to get flags as int: {err}");
+                }
+            },
+            Err(err) => {
+                log::warn!("failed to transform flags to int: {err}");
+            }
+        }
+        println!("updated flags {:?}", pipeline.property_value("flags"));
 
         self.update_title()
     }
