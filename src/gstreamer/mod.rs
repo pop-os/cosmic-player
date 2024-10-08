@@ -206,8 +206,7 @@ impl App {
         match flags_value.transform::<i32>() {
             Ok(flags_transform) => match flags_transform.get::<i32>() {
                 Ok(mut flags) => {
-                    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
-                    flags &= !GST_PLAY_FLAG_TEXT;
+                    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_TEXT;
                     match gst::glib::Value::from(flags).transform_with_type(flags_value.type_()) {
                         Ok(value) => pipeline.set_property("flags", value),
                         Err(err) => {
