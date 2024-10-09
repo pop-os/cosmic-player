@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.system76.CosmicPlayer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <project_group>COSMIC</project_group>
+  <developer_name>System76</developer_name>
+  <update_contact>jeremy@system76.com</update_contact>
+  <url type="homepage">https://github.com/pop-os/cosimc-player</url>
+  <url type="bugtracker">https://github.com/pop-os/cosimc-player</url>
+  <name>COSMIC Media Player</name>
+  <summary>Media player for the COSMIC desktop</summary>
+  <description>
+    Media player for the COSMIC desktop.
+  </description>
+  <launchable type="desktop-id">com.system76.CosmicPlayer.desktop</launchable>
+  <icon type="remote" height="256" width="256">https://raw.githubusercontent.com/pop-os/cosmic-player/master/res/icons/hicolor/256x256/apps/com.system76.CosmicPlayer.svg</icon>
+  <provides>
+    <id>com.system76.CosmicApplication</id>
+    <binaries>
+      <binary>cosmic-player</binary>
+    </binaries>
+  </provides>
+</component>
