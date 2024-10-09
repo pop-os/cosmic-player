@@ -5,7 +5,7 @@ use cosmic::{
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt};
 
-use crate::app::Action;
+use crate::Action;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub enum Modifier {

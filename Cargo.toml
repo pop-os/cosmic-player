@@ -5,13 +5,9 @@ edition = "2021"
 
 [dependencies]
 lazy_static = "1"
-paste = "1"
 serde = { version = "1", features = ["serde_derive"] }
 tokio = "1"
 url = "2"
-# ffmpeg
-cpal = { version = "0.15", optional = true }
-ffmpeg-next = { version = "6", optional = true }
 # Internationalization
 i18n-embed = { version = "0.13", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.6"
@@ -19,12 +15,11 @@ rust-embed = "6"
 # Logging
 env_logger = "0.10"
 log = "0.4"
-lexopt = "0.3"
 
 [dependencies.iced_video_player]
 git = "https://github.com/jackpot51/iced_video_player.git"
 branch = "cosmic"
-optional = true
+default-features = false
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
@@ -36,10 +31,8 @@ version = "0.2.1"
 features = ["serde"]
 
 [features]
-default = ["gstreamer", "wgpu"]
-ffmpeg = ["dep:cpal", "dep:ffmpeg-next"]
-gstreamer = ["dep:iced_video_player", "wgpu"]
-wgpu = ["libcosmic/wgpu"]
+default = ["wgpu"]
+wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 
 [profile.release-with-debug]
 inherits = "release"
