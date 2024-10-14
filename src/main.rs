@@ -23,6 +23,7 @@ use iced_video_player::{
 use std::{
     any::TypeId,
     collections::HashMap,
+    fs,
     time::{Duration, Instant},
 };
 
@@ -69,14 +70,30 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-            let url = url::Url::from_file_path(
-                std::env::args().nth(1).unwrap()
-            )
-            .unwrap();
+    let url_opt = match std::env::args().nth(1) {
+        Some(arg) => match url::Url::parse(&arg) {
+            Ok(url) => Some(url),
+            Err(_) => match fs::canonicalize(&arg) {
+                Ok(path) => match url::Url::from_file_path(&path) {
+                    Ok(url) => Some(url),
+                    Err(()) => {
+                        log::warn!("failed to parse argument {:?}", arg);
+                        None
+                    }
+                },
+                Err(_) => {
+                    log::warn!("failed to parse argument {:?}", arg);
+                    None
+                }
+            },
+        },
+        None => None,
+    };
+
     let flags = Flags {
         config_handler,
         config,
-        url,
+        url_opt,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -106,7 +123,7 @@ impl Action {
 pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
-    url: url::Url,
+    url_opt: Option<url::Url>,
 }
 
 /// Messages that are used specifically by our [`App`].
@@ -162,10 +179,15 @@ impl App {
     fn load(&mut self) -> Command<Message> {
         self.close();
 
-        let video = match Video::new(&self.flags.url) {
+        let url = match &self.flags.url_opt {
+            Some(some) => some,
+            None => return Command::none(),
+        };
+
+        let video = match Video::new(&url) {
             Ok(ok) => ok,
             Err(err) => {
-                log::warn!("failed to open {:?}: {err}", self.flags.url);
+                log::warn!("failed to open {:?}: {err}", url);
                 return Command::none();
             }
         };
