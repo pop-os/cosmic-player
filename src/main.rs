@@ -2,15 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{message, Command, Core, Settings},
+    app::{message, Core, Settings, Task},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor, font,
     iced::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
-        subscription::Subscription,
-        window, Alignment, Color, Length, Limits,
+        window, Alignment, Color, Length, Limits, Subscription,
     },
     theme,
     widget::{self, Slider},
@@ -176,19 +175,19 @@ impl App {
         self.current_text = -1;
     }
 
-    fn load(&mut self) -> Command<Message> {
+    fn load(&mut self) -> Task<Message> {
         self.close();
 
         let url = match &self.flags.url_opt {
             Some(some) => some,
-            None => return Command::none(),
+            None => return Task::none(),
         };
 
         let video = match Video::new(&url) {
             Ok(ok) => ok,
             Err(err) => {
                 log::warn!("failed to open {:?}: {err}", url);
-                return Command::none();
+                return Task::none();
             }
         };
         self.duration = video.duration().as_secs_f64();
@@ -261,11 +260,11 @@ impl App {
         }
     }
 
-    fn update_config(&mut self) -> Command<Message> {
+    fn update_config(&mut self) -> Task<Message> {
         cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
     }
 
-    fn update_title(&mut self) -> Command<Message> {
+    fn update_title(&mut self) -> Task<Message> {
         //TODO: filename?
         let title = "COSMIC Media Player";
         self.set_window_title(title.to_string())
@@ -295,7 +294,7 @@ impl Application for App {
     }
 
     /// Creates the application, and optionally emits command on initialize.
-    fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
+    fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
         core.window.content_container = false;
 
         let mut app = App {
@@ -319,16 +318,16 @@ impl Application for App {
         (app, command)
     }
 
-    fn on_escape(&mut self) -> Command<Self::Message> {
+    fn on_escape(&mut self) -> Task<Self::Message> {
         if self.fullscreen {
             return self.update(Message::Fullscreen);
         } else {
-            Command::none()
+            Task::none()
         }
     }
 
     /// Handle application events here.
-    fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
+    fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             Message::Config(config) => {
                 if config != self.flags.config {
@@ -338,16 +337,18 @@ impl Application for App {
                 }
             }
             Message::Fullscreen => {
-                self.fullscreen = !self.fullscreen;
-                self.core.window.show_headerbar = !self.fullscreen;
-                return window::change_mode(
-                    window::Id::MAIN,
-                    if self.fullscreen {
-                        window::Mode::Fullscreen
-                    } else {
-                        window::Mode::Windowed
-                    },
-                );
+                if let Some(window_id) = self.core.main_window_id() {
+                    self.fullscreen = !self.fullscreen;
+                    self.core.window.show_headerbar = !self.fullscreen;
+                    return window::change_mode(
+                        window_id,
+                        if self.fullscreen {
+                            window::Mode::Fullscreen
+                        } else {
+                            window::Mode::Windowed
+                        },
+                    );
+                }
             }
             Message::Key(modifiers, key) => {
                 for (key_bind, action) in self.key_binds.iter() {
@@ -414,7 +415,7 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     video.set_paused(true);
                 }
-                return Command::perform(
+                return Task::perform(
                     async move {
                         tokio::task::spawn_blocking(move || {
                             match gst_pbutils::MissingPluginMessage::parse(&element) {
@@ -464,12 +465,12 @@ impl Application for App {
                 return self.update_config();
             }
         }
-        Command::none()
+        Task::none()
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
         let mut row = widget::row::with_capacity(4)
-            .align_items(Alignment::Center)
+            .align_y(Alignment::Center)
             .spacing(8);
         if !self.audio_codes.is_empty() {
             //TODO: allow mute/unmute/change volume
@@ -507,7 +508,7 @@ impl Application for App {
             return widget::container(widget::text("No video open"))
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .style(theme::Container::WindowBackground)
+                .class(theme::Container::WindowBackground)
                 .into();
         };
 
@@ -526,7 +527,7 @@ impl Application for App {
             popover = popover.popup(
                 widget::container(
                     widget::row::with_capacity(5)
-                        .align_items(Alignment::Center)
+                        .align_y(Alignment::Center)
                         .spacing(8)
                         .padding([0, 8])
                         .push(
@@ -558,16 +559,14 @@ impl Application for App {
                             .on_press(Message::Fullscreen),
                         ),
                 )
-                .style(theme::Container::WindowBackground),
+                .class(theme::Container::WindowBackground),
             );
         }
 
         widget::container(popover)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(theme::Container::Custom(Box::new(|_theme| {
-                widget::container::Appearance::default().with_background(Color::BLACK)
-            })))
+            .style(|_theme| widget::container::Style::default().background(Color::BLACK))
             .into()
     }
 
@@ -576,7 +575,7 @@ impl Application for App {
         struct ThemeSubscription;
 
         Subscription::batch([
-            event::listen_with(|event, _status| match event {
+            event::listen_with(|event, _status, _window_id| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
                     Some(Message::Key(modifiers, key))
                 }
