@@ -24,7 +24,7 @@ default-features = false
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["tokio", "winit"]
+features = ["multi-window", "tokio", "winit"]
 
 [dependencies.smol_str]
 version = "0.2.1"
@@ -40,7 +40,7 @@ debug = true
 
 # [patch.'https://github.com/jackpot51/iced_video_player']
 # iced_video_player = { path = "../../iced_video_player" }
-
+# 
 # [patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }

@@ -267,7 +267,11 @@ impl App {
     fn update_title(&mut self) -> Task<Message> {
         //TODO: filename?
         let title = "COSMIC Media Player";
-        self.set_window_title(title.to_string())
+        if let Some(window_id) = self.core.main_window_id() {
+            self.set_window_title(title.to_string(), window_id)
+        } else {
+            Task::none()
+        }
     }
 }
 
