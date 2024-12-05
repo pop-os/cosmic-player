@@ -10,7 +10,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
         subscription::Subscription,
-        window, Alignment, Color, Length, Limits,
+        window, Alignment, Background, Border, Color, Length, Limits,
     },
     theme,
     widget::{self, menu::action::MenuAction, Slider},
@@ -150,16 +150,26 @@ pub struct Flags {
     url_opt: Option<url::Url>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DropdownKind {
+    Audio,
+    Subtitle,
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
+    None,
     Config(Config),
+    DropdownToggle(DropdownKind),
     FileClose,
     FileLoad(url::Url),
     FileOpen,
     Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
+    AudioToggle,
+    AudioVolume(f64),
     TextCode(usize),
     PlayPause,
     Seek(f64),
@@ -180,6 +190,7 @@ pub struct App {
     flags: Flags,
     controls: bool,
     controls_time: Instant,
+    dropdown_opt: Option<DropdownKind>,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
     video_opt: Option<Video>,
@@ -373,6 +384,7 @@ impl Application for App {
             flags,
             controls: true,
             controls_time: Instant::now(),
+            dropdown_opt: None,
             fullscreen: false,
             key_binds: key_binds(),
             video_opt: None,
@@ -400,11 +412,17 @@ impl Application for App {
     /// Handle application events here.
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
         match message {
+            Message::None => {}
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
                     self.flags.config = config;
                     return self.update_config();
+                }
+            }
+            Message::DropdownToggle(menu_kind) => {
+                if self.dropdown_opt.take() != Some(menu_kind) {
+                    self.dropdown_opt = Some(menu_kind);
                 }
             }
             Message::FileClose => {
@@ -435,6 +453,9 @@ impl Application for App {
                 );
             }
             Message::Fullscreen => {
+                //TODO: cleanest way to close dropdowns
+                self.dropdown_opt = None;
+
                 self.fullscreen = !self.fullscreen;
                 self.core.window.show_headerbar = !self.fullscreen;
                 return window::change_mode(
@@ -462,6 +483,18 @@ impl Application for App {
                     }
                 }
             }
+            Message::AudioToggle => {
+                if let Some(video) = &mut self.video_opt {
+                    video.set_muted(!video.muted());
+                    self.update_controls(true);
+                }
+            }
+            Message::AudioVolume(volume) => {
+                if let Some(video) = &mut self.video_opt {
+                    video.set_volume(volume);
+                    self.update_controls(true);
+                }
+            }
             Message::TextCode(code) => {
                 if let Ok(code) = i32::try_from(code) {
                     if let Some(video) = &self.video_opt {
@@ -472,12 +505,18 @@ impl Application for App {
                 }
             }
             Message::PlayPause => {
+                //TODO: cleanest way to close dropdowns
+                self.dropdown_opt = None;
+
                 if let Some(video) = &mut self.video_opt {
                     video.set_paused(!video.paused());
                     self.update_controls(true);
                 }
             }
             Message::Seek(secs) => {
+                //TODO: cleanest way to close dropdowns
+                self.dropdown_opt = None;
+
                 if let Some(video) = &mut self.video_opt {
                     self.dragging = true;
                     self.position = secs;
@@ -496,6 +535,9 @@ impl Application for App {
                 }
             }
             Message::SeekRelease => {
+                //TODO: cleanest way to close dropdowns
+                self.dropdown_opt = None;
+
                 if let Some(video) = &mut self.video_opt {
                     self.dragging = false;
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
@@ -547,7 +589,7 @@ impl Application for App {
                 if let Some(video) = &self.video_opt {
                     if !self.dragging {
                         self.position = video.position().as_secs_f64();
-                        self.update_controls(false);
+                        self.update_controls(self.dropdown_opt.is_some());
                     }
                 }
             }
@@ -568,29 +610,7 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        let mut row = widget::row::with_capacity(5)
-            .align_items(Alignment::Center)
-            .spacing(8);
-        row = row.push(menu::menu_bar(&self.flags.config, &self.key_binds));
-        if !self.audio_codes.is_empty() {
-            //TODO: allow mute/unmute/change volume
-            row = row.push(widget::icon::from_name("audio-volume-high-symbolic").size(16));
-            row = row.push(widget::dropdown(
-                &self.audio_codes,
-                usize::try_from(self.current_audio).ok(),
-                Message::AudioCode,
-            ));
-        }
-        if !self.text_codes.is_empty() {
-            //TODO: allow toggling subtitles
-            row = row.push(widget::icon::from_name("media-view-subtitles-symbolic").size(16));
-            row = row.push(widget::dropdown(
-                &self.text_codes,
-                usize::try_from(self.current_text).ok(),
-                Message::TextCode,
-            ));
-        }
-        vec![row.into()]
+        vec![menu::menu_bar(&self.flags.config, &self.key_binds)]
     }
 
     /// Creates a view after each update.
@@ -598,6 +618,7 @@ impl Application for App {
         let cosmic_theme::Spacing {
             space_xxs,
             space_xs,
+            space_m,
             ..
         } = theme::active().cosmic().spacing;
 
@@ -618,6 +639,9 @@ impl Application for App {
                 .into();
         };
 
+        let muted = video.muted();
+        let volume = video.volume();
+
         let video_player = VideoPlayer::new(video)
             .mouse_hidden(!self.controls)
             .on_end_of_stream(Message::EndOfStream)
@@ -626,13 +650,108 @@ impl Application for App {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let mouse_area = widget::mouse_area(video_player).on_double_press(Message::Fullscreen);
+        let mouse_area = widget::mouse_area(video_player)
+            .on_press(Message::PlayPause)
+            .on_double_press(Message::Fullscreen);
 
         let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
+        let mut popup_items = Vec::<Element<_>>::with_capacity(2);
+        if let Some(dropdown) = self.dropdown_opt {
+            let mut items = Vec::<Element<_>>::new();
+            match dropdown {
+                DropdownKind::Audio => {
+                    items.push(
+                        widget::row::with_children(vec![
+                            widget::button::icon(
+                                widget::icon::from_name({
+                                    if muted {
+                                        "audio-volume-muted-symbolic"
+                                    } else {
+                                        if volume >= (2.0 / 3.0) {
+                                            "audio-volume-high-symbolic"
+                                        } else if volume >= (1.0 / 3.0) {
+                                            "audio-volume-medium-symbolic"
+                                        } else {
+                                            "audio-volume-low-symbolic"
+                                        }
+                                    }
+                                })
+                                .size(16),
+                            )
+                            .on_press(Message::AudioToggle)
+                            .into(),
+                            //TODO: disable slider when muted?
+                            Slider::new(0.0..=1.0, volume, Message::AudioVolume)
+                                .step(0.01)
+                                .into(),
+                        ])
+                        .align_items(Alignment::Center)
+                        .into(),
+                    );
+                }
+                DropdownKind::Subtitle => {
+                    if !self.audio_codes.is_empty() {
+                        items.push(widget::text::heading(fl!("audio")).into());
+                        items.push(
+                            widget::dropdown(
+                                &self.audio_codes,
+                                usize::try_from(self.current_audio).ok(),
+                                Message::AudioCode,
+                            )
+                            .into(),
+                        );
+                    }
+                    if !self.text_codes.is_empty() {
+                        //TODO: allow toggling subtitles
+                        items.push(widget::text::heading(fl!("subtitles")).into());
+                        items.push(
+                            widget::dropdown(
+                                &self.text_codes,
+                                usize::try_from(self.current_text).ok(),
+                                Message::TextCode,
+                            )
+                            .into(),
+                        );
+                    }
+                }
+            }
+
+            let mut column = widget::column::with_capacity(items.len());
+            for item in items {
+                column = column.push(widget::container(item).padding([space_xxs, space_m]));
+            }
+
+            popup_items.push(
+                widget::row::with_children(vec![
+                    widget::horizontal_space(Length::Fill).into(),
+                    widget::container(column)
+                        .padding(1)
+                        //TODO: move style to libcosmic
+                        .style(theme::Container::custom(|theme| {
+                            let cosmic = theme.cosmic();
+                            let component = &cosmic.background.component;
+                            widget::container::Appearance {
+                                icon_color: Some(component.on.into()),
+                                text_color: Some(component.on.into()),
+                                background: Some(Background::Color(component.base.into())),
+                                border: Border {
+                                    radius: 8.0.into(),
+                                    width: 1.0,
+                                    color: component.divider.into(),
+                                },
+                                ..Default::default()
+                            }
+                        }))
+                        .width(Length::Fixed(240.0))
+                        .into(),
+                ])
+                .into(),
+            );
+        }
         if self.controls {
-            popover = popover.popup(
+            popup_items.push(
                 widget::container(
-                    widget::row::with_capacity(5)
+                    widget::row::with_capacity(7)
                         .align_items(Alignment::Center)
                         .spacing(space_xxs)
                         .push(
@@ -659,14 +778,44 @@ impl Application for App {
                         )
                         .push(
                             widget::button::icon(
+                                widget::icon::from_name("media-view-subtitles-symbolic").size(16),
+                            )
+                            .on_press(Message::DropdownToggle(DropdownKind::Subtitle)),
+                        )
+                        .push(
+                            widget::button::icon(
                                 widget::icon::from_name("view-fullscreen-symbolic").size(16),
                             )
                             .on_press(Message::Fullscreen),
+                        )
+                        .push(
+                            //TODO: scroll up/down on icon to change volume
+                            widget::button::icon(
+                                widget::icon::from_name({
+                                    if muted {
+                                        "audio-volume-muted-symbolic"
+                                    } else {
+                                        if volume >= (2.0 / 3.0) {
+                                            "audio-volume-high-symbolic"
+                                        } else if volume >= (1.0 / 3.0) {
+                                            "audio-volume-medium-symbolic"
+                                        } else {
+                                            "audio-volume-low-symbolic"
+                                        }
+                                    }
+                                })
+                                .size(16),
+                            )
+                            .on_press(Message::DropdownToggle(DropdownKind::Audio)),
                         ),
                 )
                 .padding([space_xxs, space_xs])
-                .style(theme::Container::WindowBackground),
+                .style(theme::Container::WindowBackground)
+                .into(),
             );
+        }
+        if !popup_items.is_empty() {
+            popover = popover.popup(widget::column::with_children(popup_items));
         }
 
         widget::container(popover)

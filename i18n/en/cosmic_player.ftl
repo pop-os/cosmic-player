@@ -1,3 +1,6 @@
+audio = Audio
+subtitles = Subtitles
+
 # Context Pages
 
 ## Settings
