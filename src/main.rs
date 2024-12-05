@@ -13,17 +13,18 @@ use cosmic::{
         window, Alignment, Color, Length, Limits,
     },
     theme,
-    widget::{self, Slider},
+    widget::{self, menu::action::MenuAction, Slider},
     Application, ApplicationExt, Element,
 };
 use iced_video_player::{
     gst::{self, prelude::*},
-    gst_pbutils, Video, VideoPlayer,
+    gst_app, gst_pbutils, Video, VideoPlayer,
 };
 use std::{
     any::TypeId,
     collections::HashMap,
-    fs,
+    ffi::{CStr, CString},
+    fs, process,
     time::{Duration, Instant},
 };
 
@@ -35,12 +36,27 @@ use crate::{
 mod config;
 mod key_bind;
 mod localize;
+mod menu;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
 const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
+
+fn language_name(code: &str) -> Option<String> {
+    let code_c = CString::new(code).ok()?;
+    let name_c = unsafe {
+        //TODO: export this in gstreamer_tag
+        let name_ptr = gstreamer_tag::ffi::gst_tag_get_language_name(code_c.as_ptr());
+        if name_ptr.is_null() {
+            return None;
+        }
+        CStr::from_ptr(name_ptr)
+    };
+    let name = name_c.to_str().ok()?;
+    Some(name.to_string())
+}
 
 /// Runs application with these settings
 #[rustfmt::skip]
@@ -102,19 +118,27 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Action {
+    FileClose,
+    FileOpen,
     Fullscreen,
     PlayPause,
     SeekBackward,
     SeekForward,
+    WindowClose,
 }
 
-impl Action {
-    pub fn message(&self) -> Message {
+impl MenuAction for Action {
+    type Message = Message;
+
+    fn message(&self) -> Message {
         match self {
+            Self::FileClose => Message::FileClose,
+            Self::FileOpen => Message::FileOpen,
             Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
+            Self::WindowClose => Message::WindowClose,
         }
     }
 }
@@ -130,6 +154,9 @@ pub struct Flags {
 #[derive(Clone, Debug)]
 pub enum Message {
     Config(Config),
+    FileClose,
+    FileLoad(url::Url),
+    FileOpen,
     Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
@@ -144,6 +171,7 @@ pub enum Message {
     Reload,
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
+    WindowClose,
 }
 
 /// The [`App`] stores application-specific state.
@@ -166,7 +194,14 @@ pub struct App {
 
 impl App {
     fn close(&mut self) {
-        self.video_opt = None;
+        //TODO: drop does not work well
+        if let Some(mut video) = self.video_opt.take() {
+            log::info!("pausing video");
+            video.set_paused(true);
+            log::info!("dropping video");
+            drop(video);
+            log::info!("dropped video");
+        }
         self.position = 0.0;
         self.duration = 0.0;
         self.dragging = false;
@@ -184,13 +219,44 @@ impl App {
             None => return Command::none(),
         };
 
-        let video = match Video::new(&url) {
-            Ok(ok) => ok,
-            Err(err) => {
-                log::warn!("failed to open {:?}: {err}", url);
-                return Command::none();
+        log::info!("Loading {}", url);
+
+        //TODO: this code came from iced_video_player::Video::new and has been modified to stop the pipeline on error
+        //TODO: remove unwraps and enable playback of files with only audio.
+        let video = {
+            gst::init().unwrap();
+
+            let pipeline = format!(
+                "playbin uri=\"{}\" video-sink=\"videoscale ! videoconvert ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
+                url.as_str()
+            );
+            let pipeline = gst::parse::launch(pipeline.as_ref())
+                .unwrap()
+                .downcast::<gst::Pipeline>()
+                .map_err(|_| iced_video_player::Error::Cast)
+                .unwrap();
+
+            let video_sink: gst::Element = pipeline.property("video-sink");
+            let pad = video_sink.pads().first().cloned().unwrap();
+            let pad = pad.dynamic_cast::<gst::GhostPad>().unwrap();
+            let bin = pad
+                .parent_element()
+                .unwrap()
+                .downcast::<gst::Bin>()
+                .unwrap();
+            let video_sink = bin.by_name("iced_video").unwrap();
+            let video_sink = video_sink.downcast::<gst_app::AppSink>().unwrap();
+
+            match Video::from_gst_pipeline(pipeline.clone(), video_sink, None) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::warn!("failed to open {}: {err}", url);
+                    pipeline.set_state(gst::State::Null).unwrap();
+                    return Command::none();
+                }
             }
         };
+
         self.duration = video.duration().as_secs_f64();
         let pipeline = video.pipeline();
         self.video_opt = Some(video);
@@ -200,13 +266,15 @@ impl App {
         for i in 0..n_audio {
             let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
             log::info!("audio stream {i}: {tags:?}");
-            self.audio_codes.push(
-                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
-                    language_code.get().to_string()
+            self.audio_codes
+                .push(if let Some(title) = tags.get::<gst::tags::Title>() {
+                    title.get().to_string()
+                } else if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    let language_code = language_code.get();
+                    language_name(language_code).unwrap_or_else(|| language_code.to_string())
                 } else {
                     format!("Audio #{i}")
-                },
-            );
+                });
         }
         self.current_audio = pipeline.property::<i32>("current-audio");
 
@@ -215,13 +283,15 @@ impl App {
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
             log::info!("text stream {i}: {tags:?}");
-            self.text_codes.push(
-                if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
-                    language_code.get().to_string()
+            self.text_codes
+                .push(if let Some(title) = tags.get::<gst::tags::Title>() {
+                    title.get().to_string()
+                } else if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                    let language_code = language_code.get();
+                    language_name(language_code).unwrap_or_else(|| language_code.to_string())
                 } else {
                     format!("Subtitle #{i}")
-                },
-            );
+                });
         }
         self.current_text = pipeline.property::<i32>("current-text");
 
@@ -336,6 +406,33 @@ impl Application for App {
                     self.flags.config = config;
                     return self.update_config();
                 }
+            }
+            Message::FileClose => {
+                self.close();
+            }
+            Message::FileLoad(url) => {
+                self.flags.url_opt = Some(url);
+                return self.load();
+            }
+            Message::FileOpen => {
+                //TODO: embed cosmic-files dialog (after libcosmic rebase works)
+                #[cfg(feature = "xdg-portal")]
+                return Command::perform(
+                    async move {
+                        let dialog = cosmic::dialog::file_chooser::open::Dialog::new()
+                            .title(fl!("open-media"));
+                        match dialog.open_file().await {
+                            Ok(response) => {
+                                message::app(Message::FileLoad(response.url().to_owned()))
+                            }
+                            Err(err) => {
+                                log::warn!("failed to open file: {}", err);
+                                message::none()
+                            }
+                        }
+                    },
+                    |x| x,
+                );
             }
             Message::Fullscreen => {
                 self.fullscreen = !self.fullscreen;
@@ -463,14 +560,18 @@ impl Application for App {
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
             }
+            Message::WindowClose => {
+                process::exit(0);
+            }
         }
         Command::none()
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        let mut row = widget::row::with_capacity(4)
+        let mut row = widget::row::with_capacity(5)
             .align_items(Alignment::Center)
             .spacing(8);
+        row = row.push(menu::menu_bar(&self.flags.config, &self.key_binds));
         if !self.audio_codes.is_empty() {
             //TODO: allow mute/unmute/change volume
             row = row.push(widget::icon::from_name("audio-volume-high-symbolic").size(16));
@@ -494,6 +595,12 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
+        let cosmic_theme::Spacing {
+            space_xxs,
+            space_xs,
+            ..
+        } = theme::active().cosmic().spacing;
+
         let format_time = |time_float: f64| -> String {
             let time = time_float.floor() as i64;
             let seconds = time % 60;
@@ -527,8 +634,7 @@ impl Application for App {
                 widget::container(
                     widget::row::with_capacity(5)
                         .align_items(Alignment::Center)
-                        .spacing(8)
-                        .padding([0, 8])
+                        .spacing(space_xxs)
                         .push(
                             widget::button::icon(
                                 if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
@@ -558,6 +664,7 @@ impl Application for App {
                             .on_press(Message::Fullscreen),
                         ),
                 )
+                .padding([space_xxs, space_xs])
                 .style(theme::Container::WindowBackground),
             );
         }
