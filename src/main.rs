@@ -24,7 +24,7 @@ use std::{
     any::TypeId,
     collections::HashMap,
     ffi::{CStr, CString},
-    fs, process,
+    fs, process, thread,
     time::{Duration, Instant},
 };
 
@@ -558,6 +558,11 @@ impl Application for App {
                         tokio::task::spawn_blocking(move || {
                             match gst_pbutils::MissingPluginMessage::parse(&element) {
                                 Ok(missing_plugin) => {
+                                    // Wait for any prior installations to finish
+                                    while gst_pbutils::missing_plugins::install_plugins_installation_in_progress() {
+                                        thread::sleep(Duration::from_millis(250));
+                                    }
+
                                     let mut install_ctx = gst_pbutils::InstallPluginsContext::new();
                                     install_ctx
                                         .set_desktop_id(&format!("{}.desktop", Self::APP_ID));
@@ -567,7 +572,14 @@ impl Application for App {
                                         &[&install_detail],
                                         Some(&install_ctx),
                                     );
+                                    //TODO: why does the sync function return with install-in-progress?
                                     log::info!("plugin install status: {}", status);
+
+                                    // Wait for installation to finish
+                                    while gst_pbutils::missing_plugins::install_plugins_installation_in_progress() {
+                                        thread::sleep(Duration::from_millis(250));
+                                    }
+
                                     log::info!(
                                         "gstreamer registry update: {:?}",
                                         gst::Registry::update()
