@@ -558,38 +558,50 @@ impl Application for App {
                         tokio::task::spawn_blocking(move || {
                             match gst_pbutils::MissingPluginMessage::parse(&element) {
                                 Ok(missing_plugin) => {
-                                    // Wait for any prior installations to finish
-                                    while gst_pbutils::missing_plugins::install_plugins_installation_in_progress() {
-                                        thread::sleep(Duration::from_millis(250));
-                                    }
-
                                     let mut install_ctx = gst_pbutils::InstallPluginsContext::new();
                                     install_ctx
                                         .set_desktop_id(&format!("{}.desktop", Self::APP_ID));
                                     let install_detail = missing_plugin.installer_detail();
-                                    println!("installing plugins: {}", install_detail);
-                                    let status = gst_pbutils::missing_plugins::install_plugins_sync(
-                                        &[&install_detail],
-                                        Some(&install_ctx),
-                                    );
-                                    //TODO: why does the sync function return with install-in-progress?
-                                    log::info!("plugin install status: {}", status);
+                                    loop {
+                                        // Wait for any prior installations to finish
+                                        while gst_pbutils::missing_plugins::install_plugins_installation_in_progress() {
+                                            thread::sleep(Duration::from_millis(250));
+                                        }
 
-                                    // Wait for installation to finish
-                                    while gst_pbutils::missing_plugins::install_plugins_installation_in_progress() {
-                                        thread::sleep(Duration::from_millis(250));
+                                        println!("installing plugins: {}", install_detail);
+                                        let status = gst_pbutils::missing_plugins::install_plugins_sync(
+                                            &[&install_detail],
+                                            Some(&install_ctx),
+                                        );
+                                        //TODO: why does the sync function return with install-in-progress?
+                                        log::info!("plugin install status: {}", status);
+
+                                        match status {
+                                            gst_pbutils::InstallPluginsReturn::InstallInProgress => {
+                                                // Try again until completed
+                                                continue;
+                                            },
+                                            gst_pbutils::InstallPluginsReturn::Success => {
+                                                // Update registry and reload video
+                                                log::info!(
+                                                    "gstreamer registry update: {:?}",
+                                                    gst::Registry::update()
+                                                );
+                                                return message::app(Message::Reload);
+                                            },
+                                            _ => {
+                                                log::warn!("failed to install plugins: {status}");
+                                                break;
+                                            }
+                                        }
                                     }
 
-                                    log::info!(
-                                        "gstreamer registry update: {:?}",
-                                        gst::Registry::update()
-                                    );
                                 }
                                 Err(err) => {
                                     log::warn!("failed to parse missing plugin message: {err}");
                                 }
                             }
-                            message::app(Message::Reload)
+                            message::none()
                         })
                         .await
                         .unwrap()
