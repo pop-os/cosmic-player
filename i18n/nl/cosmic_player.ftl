@@ -1,17 +1,17 @@
 audio = Audio
-Subtitles = Ondertitels
+subtitles = Ondertiteling
 
 # Context Pages
 
 ## Settings
-settings = Instelligen
+settings = Instellingen
 
 ### Appearance
 appearance = Uiterlijk
 theme = Thema
-match-desktop = Automatisch
-dark = Donkere
-light = Heldere
+match-desktop = Systeemstandaard
+dark = Donker
+light = Licht
 
 # Menu
 
