@@ -20,4 +20,4 @@ file = File
 open-media = Apri media...
 open-recent-media = Apri media recente
 close-file = Chiudere file
-quit = Usci
+quit = Esci
