@@ -27,6 +27,7 @@ use std::{
     fs, process, thread,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc;
 
 use crate::{
     config::{Config, CONFIG_VERSION},
@@ -37,6 +38,8 @@ mod config;
 mod key_bind;
 mod localize;
 mod menu;
+#[cfg(feature = "mpris-server")]
+mod mpris;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
@@ -156,6 +159,33 @@ pub enum DropdownKind {
     Subtitle,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MprisMeta {
+    url_opt: Option<url::Url>,
+    album: String,
+    album_art_opt: Option<url::Url>,
+    album_artist: String,
+    artists: Vec<String>,
+    title: String,
+    disc_number: i32,
+    track_number: i32,
+    duration_micros: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MprisState {
+    fullscreen: bool,
+    position_micros: i64,
+    paused: bool,
+    volume: f64,
+}
+
+#[derive(Clone, Debug)]
+pub enum MprisEvent {
+    Meta(MprisMeta),
+    State(MprisState),
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -171,12 +201,15 @@ pub enum Message {
     AudioToggle,
     AudioVolume(f64),
     TextCode(usize),
+    Pause,
+    Play,
     PlayPause,
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
     EndOfStream,
     MissingPlugin(gst::Message),
+    MprisChannel(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>),
     NewFrame,
     Reload,
     ShowControls,
@@ -188,16 +221,19 @@ pub enum Message {
 pub struct App {
     core: Core,
     flags: Flags,
+    album_art_opt: Option<tempfile::NamedTempFile>,
     controls: bool,
     controls_time: Instant,
     dropdown_opt: Option<DropdownKind>,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
+    mpris_opt: Option<(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>)>,
     video_opt: Option<Video>,
     position: f64,
     duration: f64,
     dragging: bool,
     audio_codes: Vec<String>,
+    audio_tags: Vec<gst::TagList>,
     current_audio: i32,
     text_codes: Vec<String>,
     current_text: i32,
@@ -205,6 +241,7 @@ pub struct App {
 
 impl App {
     fn close(&mut self) {
+        self.album_art_opt = None;
         //TODO: drop does not work well
         if let Some(mut video) = self.video_opt.take() {
             log::info!("pausing video");
@@ -216,10 +253,12 @@ impl App {
         self.position = 0.0;
         self.duration = 0.0;
         self.dragging = false;
-        self.audio_codes = Vec::new();
+        self.audio_codes.clear();
+        self.audio_tags.clear();
         self.current_audio = -1;
-        self.text_codes = Vec::new();
+        self.text_codes.clear();
         self.current_text = -1;
+        self.update_mpris_meta();
     }
 
     fn load(&mut self) -> Command<Message> {
@@ -272,11 +311,17 @@ impl App {
         let pipeline = video.pipeline();
         self.video_opt = Some(video);
 
+        let n_video = pipeline.property::<i32>("n-video");
+        for i in 0..n_video {
+            let tags: gst::TagList = pipeline.emit_by_name("get-video-tags", &[&i]);
+            log::info!("video stream {i}: {tags:#?}");
+        }
+
         let n_audio = pipeline.property::<i32>("n-audio");
         self.audio_codes = Vec::with_capacity(n_audio as usize);
         for i in 0..n_audio {
             let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
-            log::info!("audio stream {i}: {tags:?}");
+            log::info!("audio stream {i}: {tags:#?}");
             self.audio_codes
                 .push(if let Some(title) = tags.get::<gst::tags::Title>() {
                     title.get().to_string()
@@ -286,6 +331,7 @@ impl App {
                 } else {
                     format!("Audio #{i}")
                 });
+            self.audio_tags.push(tags);
         }
         self.current_audio = pipeline.property::<i32>("current-audio");
 
@@ -293,7 +339,7 @@ impl App {
         self.text_codes = Vec::with_capacity(n_text as usize);
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
-            log::info!("text stream {i}: {tags:?}");
+            log::info!("text stream {i}: {tags:#?}");
             self.text_codes
                 .push(if let Some(title) = tags.get::<gst::tags::Title>() {
                     title.get().to_string()
@@ -330,20 +376,137 @@ impl App {
         }
         println!("updated flags {:?}", pipeline.property_value("flags"));
 
+        self.update_mpris_meta();
         self.update_title()
     }
 
     fn update_controls(&mut self, in_use: bool) {
-        if in_use {
+        if in_use
+            || !self
+                .video_opt
+                .as_ref()
+                .map_or(false, |video| video.has_video())
+        {
             self.controls = true;
             self.controls_time = Instant::now();
         } else if self.controls && self.controls_time.elapsed() > CONTROLS_TIMEOUT {
             self.controls = false;
         }
+        self.update_mpris_state();
     }
 
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
+    }
+
+    fn update_mpris_meta(&mut self) {
+        if let Some((old, _, tx)) = &mut self.mpris_opt {
+            let mut new = MprisMeta {
+                //TODO: clear url_opt when file is closed
+                url_opt: self.flags.url_opt.clone(),
+                duration_micros: (self.duration * 1_000_000.0) as i64,
+                ..Default::default()
+            };
+            //TODO: use any other stream tags?
+            if let Some(tags) = self.audio_tags.get(0) {
+                log::info!("{:#?}", tags);
+                if let Some(tag) = tags.get::<gst::tags::Album>() {
+                    new.album = tag.get().into();
+                }
+                if let Some(tag) = tags.get::<gst::tags::AlbumArtist>() {
+                    new.album_artist = tag.get().into();
+                }
+                if let Some(tag) = tags.get::<gst::tags::Artist>() {
+                    //TODO: how are multiple artists handled by gstreamer?
+                    new.artists = vec![tag.get().into()];
+                }
+                if let Some(tag) = tags.get::<gst::tags::Title>() {
+                    new.title = tag.get().into();
+                }
+                /*TODO: no gstreamer tag
+                if let Some(tag) = tags.get::<gst::tags::DiscNumber>() {
+                    new.disc_number = tag.get();
+                }
+                */
+                if let Some(tag) = tags.get::<gst::tags::TrackNumber>() {
+                    new.track_number = tag.get() as i32;
+                }
+                if self.album_art_opt.is_none() {
+                    //TODO: run in thread or async to avoid blocking UI?
+                    if let Some(tag) = tags.get::<gst::tags::Image>() {
+                        let sample = tag.get();
+                        if let Some(buffer) = sample.buffer() {
+                            match buffer.map_readable() {
+                                //TODO: use original format instead of converting to PNG?
+                                Ok(buffer_map) => match image::load_from_memory(&buffer_map) {
+                                    Ok(image) => {
+                                        match tempfile::Builder::new()
+                                            .prefix(&format!("cosmic-player.pid{}.", process::id()))
+                                            .suffix(".png")
+                                            .tempfile()
+                                        {
+                                            Ok(mut album_art) => {
+                                                match image.write_with_encoder(
+                                                    image::codecs::png::PngEncoder::new(
+                                                        &mut album_art,
+                                                    ),
+                                                ) {
+                                                    Ok(()) => self.album_art_opt = Some(album_art),
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to write temporary image: {}",
+                                                            err
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to create temporary image: {}",
+                                                    err
+                                                );
+                                            }
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to load image from memory: {}", err);
+                                    }
+                                },
+                                Err(err) => {
+                                    log::warn!("failed to map image buffer: {}", err);
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(album_art) = &self.album_art_opt {
+                    new.album_art_opt = url::Url::from_file_path(album_art.path()).ok();
+                }
+            }
+            if new != *old {
+                *old = new.clone();
+                let _ = tx.send(MprisEvent::Meta(new));
+            }
+        }
+    }
+
+    fn update_mpris_state(&mut self) {
+        if let Some((_, old, tx)) = &mut self.mpris_opt {
+            let mut new = MprisState {
+                fullscreen: self.fullscreen,
+                position_micros: (self.position * 1_000_000.0) as i64,
+                paused: true,
+                volume: 0.0,
+            };
+            if let Some(video) = &self.video_opt {
+                new.paused = video.paused();
+                new.volume = video.volume();
+            }
+            if new != *old {
+                *old = new.clone();
+                let _ = tx.send(MprisEvent::State(new));
+            }
+        }
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -382,16 +545,19 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
+            album_art_opt: None,
             controls: true,
             controls_time: Instant::now(),
             dropdown_opt: None,
             fullscreen: false,
             key_binds: key_binds(),
+            mpris_opt: None,
             video_opt: None,
             position: 0.0,
             duration: 0.0,
             dragging: false,
             audio_codes: Vec::new(),
+            audio_tags: Vec::new(),
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: -1,
@@ -491,8 +657,10 @@ impl Application for App {
             }
             Message::AudioVolume(volume) => {
                 if let Some(video) = &mut self.video_opt {
-                    video.set_volume(volume);
-                    self.update_controls(true);
+                    if volume >= 0.0 && volume <= 1.0 {
+                        video.set_volume(volume);
+                        self.update_controls(true);
+                    }
                 }
             }
             Message::TextCode(code) => {
@@ -504,12 +672,16 @@ impl Application for App {
                     }
                 }
             }
-            Message::PlayPause => {
+            Message::Pause | Message::Play | Message::PlayPause => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
 
                 if let Some(video) = &mut self.video_opt {
-                    video.set_paused(!video.paused());
+                    video.set_paused(match message {
+                        Message::Play => false,
+                        Message::Pause => true,
+                        _ => !video.paused(),
+                    });
                     self.update_controls(true);
                 }
             }
@@ -609,6 +781,11 @@ impl Application for App {
                     |x| x,
                 );
             }
+            Message::MprisChannel(meta, state, tx) => {
+                self.mpris_opt = Some((meta, state, tx));
+                self.update_mpris_meta();
+                self.update_mpris_state();
+            }
             Message::NewFrame => {
                 if let Some(video) = &self.video_opt {
                     if !self.dragging {
@@ -666,13 +843,28 @@ impl Application for App {
         let muted = video.muted();
         let volume = video.volume();
 
-        let video_player = VideoPlayer::new(video)
+        let mut video_player: Element<_> = VideoPlayer::new(video)
             .mouse_hidden(!self.controls)
             .on_end_of_stream(Message::EndOfStream)
             .on_missing_plugin(Message::MissingPlugin)
             .on_new_frame(Message::NewFrame)
             .width(Length::Fill)
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .into();
+
+        if let Some(album_art) = &self.album_art_opt {
+            if !video.has_video() {
+                // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
+                video_player = widget::column::with_children(vec![
+                    widget::image(widget::image::Handle::from_path(album_art.path()))
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .into(),
+                    widget::container(video_player).height(space_m).into(),
+                ])
+                .into();
+            }
+        }
 
         let mouse_area = widget::mouse_area(video_player)
             .on_press(Message::PlayPause)
@@ -855,7 +1047,7 @@ impl Application for App {
         struct ConfigSubscription;
         struct ThemeSubscription;
 
-        Subscription::batch([
+        let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
                     Some(Message::Key(modifiers, key))
@@ -885,6 +1077,13 @@ impl Application for App {
                 }
                 Message::SystemThemeModeChange(update.config)
             }),
-        ])
+        ];
+
+        #[cfg(feature = "mpris-server")]
+        {
+            subscriptions.push(mpris::subscription());
+        }
+
+        Subscription::batch(subscriptions)
     }
 }

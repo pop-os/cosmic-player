@@ -1075,12 +1075,15 @@ dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
  "iced_video_player",
+ "image",
  "lazy_static",
  "libcosmic",
  "log",
+ "mpris-server",
  "rust-embed",
  "serde",
  "smol_str",
+ "tempfile",
  "tokio",
  "url",
 ]
@@ -2695,7 +2698,7 @@ dependencies = [
 [[package]]
 name = "iced_video_player"
 version = "0.6.0"
-source = "git+https://github.com/jackpot51/iced_video_player.git?branch=prev-cosmic#4c921bfe57f6cc91b8b5cc63373ce78cb1c1f922"
+source = "git+https://github.com/jackpot51/iced_video_player.git?branch=prev-cosmic#3f9a1b690a41171d212e79fd6c8488dc9b1b8f4c"
 dependencies = [
  "glib",
  "gstreamer",
@@ -3484,6 +3487,19 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "mpris-server"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "058bc2227727af394f34aa51da3e36aeecf2c808f39315d35f754872660750ae"
+dependencies = [
+ "async-channel",
+ "futures-channel",
+ "serde",
+ "trait-variant",
+ "zbus 4.4.0",
 ]
 
 [[package]]
@@ -5256,6 +5272,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trait-variant"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.96",
 ]
 
 [[package]]

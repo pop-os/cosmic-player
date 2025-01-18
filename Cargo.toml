@@ -5,8 +5,10 @@ edition = "2021"
 
 [dependencies]
 gstreamer-tag = "0.23"
+image = "0.24.9"
 lazy_static = "1"
 serde = { version = "1", features = ["serde_derive"] }
+tempfile = "3"
 tokio = "1"
 url = "2"
 # Internationalization
@@ -28,12 +30,16 @@ branch = "prev-master"
 default-features = false
 features = ["tokio", "winit"]
 
+[dependencies.mpris-server]
+version = "0.8.1"
+optional = true
+
 [dependencies.smol_str]
 version = "0.2.1"
 features = ["serde"]
 
 [features]
-default = ["xdg-portal", "wgpu"]
+default = ["mpris-server", "xdg-portal", "wgpu"]
 xdg-portal = ["libcosmic/xdg-portal"]
 wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 
