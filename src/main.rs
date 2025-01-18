@@ -96,12 +96,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(path) => match url::Url::from_file_path(&path) {
                     Ok(url) => Some(url),
                     Err(()) => {
-                        log::warn!("failed to parse argument {:?}", arg);
+                        log::warn!("failed to parse path {:?}", path);
                         None
                     }
                 },
-                Err(_) => {
-                    log::warn!("failed to parse argument {:?}", arg);
+                Err(err) => {
+                    log::warn!("failed to parse argument {:?}: {}", arg, err);
                     None
                 }
             },
