@@ -10,7 +10,7 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
         subscription::Subscription,
-        window, Alignment, Background, Border, Color, Length, Limits,
+        window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
     theme,
     widget::{self, menu::action::MenuAction, Slider},
@@ -873,6 +873,7 @@ impl Application for App {
                 // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
                 video_player = widget::column::with_children(vec![
                     widget::image(widget::image::Handle::from_path(album_art.path()))
+                        .content_fit(ContentFit::ScaleDown)
                         .width(Length::Fill)
                         .height(Length::Fill)
                         .into(),
