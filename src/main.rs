@@ -832,8 +832,24 @@ impl Application for App {
         };
 
         let Some(video) = &self.video_opt else {
-            //TODO: open button if no video?
-            return widget::container(widget::text("No video open"))
+            //TODO: use space variables
+            let column = widget::column::with_capacity(4)
+                .align_items(Alignment::Center)
+                .spacing(24)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(widget::vertical_space(Length::Fill))
+                .push(
+                    widget::column::with_capacity(2)
+                        .align_items(Alignment::Center)
+                        .spacing(8)
+                        .push(widget::icon::from_name("folder-symbolic").size(64))
+                        .push(widget::text::body(fl!("no-video-or-audio-file-open"))),
+                )
+                .push(widget::button::suggested(fl!("open-file")).on_press(Message::FileOpen))
+                .push(widget::vertical_space(Length::Fill));
+
+            return widget::container(column)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(theme::Container::WindowBackground)
