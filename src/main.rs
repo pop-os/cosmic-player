@@ -871,7 +871,7 @@ impl Application for App {
             .on_double_press(Message::Fullscreen);
 
         let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
-        let mut popup_items = Vec::<Element<_>>::with_capacity(2);
+        let mut popup_items = Vec::<Element<_>>::with_capacity(3);
         if let Some(dropdown) = self.dropdown_opt {
             let mut items = Vec::<Element<_>>::new();
             match dropdown {
@@ -965,70 +965,95 @@ impl Application for App {
             );
         }
         if self.controls {
-            popup_items.push(
-                widget::container(
-                    widget::row::with_capacity(7)
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs)
-                        .push(
-                            widget::button::icon(
-                                if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
-                                    widget::icon::from_name("media-playback-start-symbolic")
-                                        .size(16)
-                                } else {
-                                    widget::icon::from_name("media-playback-pause-symbolic")
-                                        .size(16)
-                                },
-                            )
-                            .on_press(Message::PlayPause),
-                        )
-                        .push(widget::text(format_time(self.position)).font(font::mono()))
-                        .push(
-                            Slider::new(0.0..=self.duration, self.position, Message::Seek)
-                                .step(0.1)
-                                .on_release(Message::SeekRelease),
-                        )
-                        .push(
-                            widget::text(format_time(self.duration - self.position))
-                                .font(font::mono()),
-                        )
-                        .push(
-                            widget::button::icon(
-                                widget::icon::from_name("media-view-subtitles-symbolic").size(16),
-                            )
-                            .on_press(Message::DropdownToggle(DropdownKind::Subtitle)),
-                        )
-                        .push(
-                            widget::button::icon(
-                                widget::icon::from_name("view-fullscreen-symbolic").size(16),
-                            )
-                            .on_press(Message::Fullscreen),
-                        )
-                        .push(
-                            //TODO: scroll up/down on icon to change volume
-                            widget::button::icon(
-                                widget::icon::from_name({
-                                    if muted {
-                                        "audio-volume-muted-symbolic"
-                                    } else {
-                                        if volume >= (2.0 / 3.0) {
-                                            "audio-volume-high-symbolic"
-                                        } else if volume >= (1.0 / 3.0) {
-                                            "audio-volume-medium-symbolic"
-                                        } else {
-                                            "audio-volume-low-symbolic"
-                                        }
-                                    }
-                                })
-                                .size(16),
-                            )
-                            .on_press(Message::DropdownToggle(DropdownKind::Audio)),
-                        ),
+            let mut row = widget::row::with_capacity(7)
+                .align_items(Alignment::Center)
+                .spacing(space_xxs)
+                .push(
+                    widget::button::icon(
+                        if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                            widget::icon::from_name("media-playback-start-symbolic").size(16)
+                        } else {
+                            widget::icon::from_name("media-playback-pause-symbolic").size(16)
+                        },
+                    )
+                    .on_press(Message::PlayPause),
+                );
+            if self.core.is_condensed() {
+                row = row.push(widget::horizontal_space(Length::Fill));
+            } else {
+                row = row
+                    .push(widget::text(format_time(self.position)).font(font::mono()))
+                    .push(
+                        Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                            .step(0.1)
+                            .on_release(Message::SeekRelease),
+                    )
+                    .push(
+                        widget::text(format_time(self.duration - self.position)).font(font::mono()),
+                    );
+            }
+            row = row
+                .push(
+                    widget::button::icon(
+                        widget::icon::from_name("media-view-subtitles-symbolic").size(16),
+                    )
+                    .on_press(Message::DropdownToggle(DropdownKind::Subtitle)),
                 )
-                .padding([space_xxs, space_xs])
-                .style(theme::Container::WindowBackground)
-                .into(),
+                .push(
+                    widget::button::icon(
+                        widget::icon::from_name("view-fullscreen-symbolic").size(16),
+                    )
+                    .on_press(Message::Fullscreen),
+                )
+                .push(
+                    //TODO: scroll up/down on icon to change volume
+                    widget::button::icon(
+                        widget::icon::from_name({
+                            if muted {
+                                "audio-volume-muted-symbolic"
+                            } else {
+                                if volume >= (2.0 / 3.0) {
+                                    "audio-volume-high-symbolic"
+                                } else if volume >= (1.0 / 3.0) {
+                                    "audio-volume-medium-symbolic"
+                                } else {
+                                    "audio-volume-low-symbolic"
+                                }
+                            }
+                        })
+                        .size(16),
+                    )
+                    .on_press(Message::DropdownToggle(DropdownKind::Audio)),
+                );
+            popup_items.push(
+                widget::container(row)
+                    .padding([space_xxs, space_xs])
+                    .style(theme::Container::WindowBackground)
+                    .into(),
             );
+
+            if self.core.is_condensed() {
+                popup_items.push(
+                    widget::container(
+                        widget::row::with_capacity(3)
+                            .align_items(Alignment::Center)
+                            .spacing(space_xxs)
+                            .push(widget::text(format_time(self.position)).font(font::mono()))
+                            .push(
+                                Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                                    .step(0.1)
+                                    .on_release(Message::SeekRelease),
+                            )
+                            .push(
+                                widget::text(format_time(self.duration - self.position))
+                                    .font(font::mono()),
+                            ),
+                    )
+                    .padding([space_xxs, space_xs])
+                    .style(theme::Container::WindowBackground)
+                    .into(),
+                );
+            }
         }
         if !popup_items.is_empty() {
             popover = popover.popup(widget::column::with_children(popup_items));
