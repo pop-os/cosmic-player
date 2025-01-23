@@ -1,4 +1,6 @@
 audio = Ljud
+no-video-or-audio-file-open = Ingen video eller ljudfil är öppen
+open-file = Öppna fil
 subtitles = Undertexter
 
 # Kontextsidor
