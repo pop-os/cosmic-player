@@ -13,9 +13,11 @@ tempfile = "3"
 tokio = "1"
 url = "2"
 # Internationalization
-i18n-embed = { version = "0.13", features = ["fluent-system", "desktop-requester"] }
-i18n-embed-fl = "0.6"
-rust-embed = "6"
+icu_collator = "1.5"
+icu_provider = { version = "1.5", features = ["sync"] }
+i18n-embed = { version = "0.14", features = ["fluent-system", "desktop-requester"] }
+i18n-embed-fl = "0.7"
+rust-embed = "8"
 # Logging
 env_logger = "0.10"
 log = "0.4"

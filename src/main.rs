@@ -12,8 +12,8 @@ use cosmic::{
         subscription::Subscription,
         window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
-    theme,
-    widget::{self, menu::action::MenuAction, Slider},
+    iced_style, theme,
+    widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
     Application, ApplicationExt, Element,
 };
 use iced_video_player::{
@@ -24,7 +24,9 @@ use std::{
     any::TypeId,
     collections::HashMap,
     ffi::{CStr, CString},
-    fs, process, thread,
+    fs,
+    path::{Path, PathBuf},
+    process, thread,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
@@ -32,6 +34,7 @@ use tokio::sync::mpsc;
 use crate::{
     config::{Config, ConfigState, CONFIG_VERSION},
     key_bind::{key_binds, KeyBind},
+    project::ProjectNode,
 };
 
 mod config;
@@ -40,6 +43,7 @@ mod localize;
 mod menu;
 #[cfg(feature = "mpris-server")]
 mod mpris;
+mod project;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
@@ -143,6 +147,7 @@ pub enum Action {
     FileClose,
     FileOpen,
     FileOpenRecent(usize),
+    FolderClose(usize),
     FolderOpen,
     FolderOpenRecent(usize),
     Fullscreen,
@@ -160,6 +165,7 @@ impl MenuAction for Action {
             Self::FileClose => Message::FileClose,
             Self::FileOpen => Message::FileOpen,
             Self::FileOpenRecent(index) => Message::FileOpenRecent(*index),
+            Self::FolderClose(index) => Message::FolderClose(*index),
             Self::FolderOpen => Message::FolderOpen,
             Self::FolderOpenRecent(index) => Message::FolderOpenRecent(*index),
             Self::Fullscreen => Message::Fullscreen,
@@ -224,6 +230,8 @@ pub enum Message {
     FileLoad(url::Url),
     FileOpen,
     FileOpenRecent(usize),
+    FolderClose(usize),
+    FolderLoad(PathBuf),
     FolderOpen,
     FolderOpenRecent(usize),
     Fullscreen,
@@ -259,6 +267,8 @@ pub struct App {
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
     mpris_opt: Option<(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>)>,
+    nav_model: segmented_button::SingleSelectModel,
+    projects: Vec<(String, PathBuf)>,
     video_opt: Option<Video>,
     position: f64,
     duration: f64,
@@ -293,6 +303,7 @@ impl App {
         self.text_codes.clear();
         self.current_text = -1;
         self.update_mpris_meta();
+        self.update_nav_bar_active();
         was_open
     }
 
@@ -422,6 +433,128 @@ impl App {
 
         self.update_mpris_meta();
         self.update_title()
+    }
+
+    fn open_folder<P: AsRef<Path>>(&mut self, path: P, mut position: u16, indent: u16) {
+        let read_dir = match fs::read_dir(&path) {
+            Ok(ok) => ok,
+            Err(err) => {
+                log::error!("failed to read directory {:?}: {}", path.as_ref(), err);
+                return;
+            }
+        };
+
+        let mut nodes = Vec::new();
+        for entry_res in read_dir {
+            let entry = match entry_res {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::error!(
+                        "failed to read entry in directory {:?}: {}",
+                        path.as_ref(),
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            let entry_path = entry.path();
+            let node = match ProjectNode::new(&entry_path) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::error!(
+                        "failed to open directory {:?} entry {:?}: {}",
+                        path.as_ref(),
+                        entry_path,
+                        err
+                    );
+                    continue;
+                }
+            };
+            nodes.push(node);
+        }
+
+        nodes.sort();
+
+        for node in nodes {
+            let mut entity = self
+                .nav_model
+                .insert()
+                .position(position)
+                .indent(indent)
+                .text(node.name().to_string());
+            if let Some(icon) = node.icon(16) {
+                entity = entity.icon(icon);
+            }
+            entity.data(node);
+
+            position += 1;
+        }
+    }
+
+    pub fn open_project<P: AsRef<Path>>(&mut self, path: P) {
+        let path = path.as_ref();
+        let node = match ProjectNode::new(path) {
+            Ok(mut node) => {
+                match &mut node {
+                    ProjectNode::Folder {
+                        name,
+                        path,
+                        open,
+                        root,
+                    } => {
+                        *open = true;
+                        *root = true;
+
+                        for (_project_name, project_path) in self.projects.iter() {
+                            if project_path == path {
+                                // Project already open
+                                return;
+                            }
+                        }
+
+                        // Save the absolute path
+                        self.projects.push((name.to_string(), path.to_path_buf()));
+
+                        // Add to recent projects, ensuring only one entry
+                        self.flags
+                            .config_state
+                            .recent_projects
+                            .retain(|x| x != path);
+                        self.flags
+                            .config_state
+                            .recent_projects
+                            .push_front(path.to_path_buf());
+                        self.flags.config_state.recent_projects.truncate(10);
+                        self.save_config_state();
+
+                        // Open nav bar
+                        self.core.nav_bar_set_toggled(true);
+                    }
+                    _ => {
+                        log::error!("failed to open project {:?}: not a directory", path);
+                        return;
+                    }
+                }
+                node
+            }
+            Err(err) => {
+                log::error!("failed to open project {:?}: {}", path, err);
+                return;
+            }
+        };
+
+        let mut entity = self.nav_model.insert().text(node.name().to_string());
+        if let Some(icon) = node.icon(16) {
+            entity = entity.icon(icon);
+        }
+        entity = entity.data(node);
+
+        let id = entity.id();
+
+        let position = self.nav_model.position(id).unwrap_or(0);
+
+        self.open_folder(path, position + 1, 1);
     }
 
     fn save_config_state(&mut self) {
@@ -561,6 +694,52 @@ impl App {
         }
     }
 
+    fn update_nav_bar_active(&mut self) {
+        let tab_path_opt = match &self.flags.url_opt {
+            Some(url) => url.to_file_path().ok(),
+            None => None,
+        };
+
+        // Locate tree node to activate
+        let mut active_id = segmented_button::Entity::default();
+
+        if let Some(tab_path) = tab_path_opt {
+            // Automatically expand tree to find and select active file
+            loop {
+                let mut expand_opt = None;
+                for id in self.nav_model.iter() {
+                    if let Some(node) = self.nav_model.data(id) {
+                        match node {
+                            ProjectNode::Folder { path, open, .. } => {
+                                if tab_path.starts_with(path) && !*open {
+                                    expand_opt = Some(id);
+                                    break;
+                                }
+                            }
+                            ProjectNode::File { path, .. } => {
+                                if path == &tab_path {
+                                    active_id = id;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                match expand_opt {
+                    Some(id) => {
+                        //TODO: can this be optimized?
+                        // Task not used becuase opening a folder just returns Task::none
+                        let _ = self.on_nav_select(id);
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+        self.nav_model.activate(active_id);
+    }
+
     fn update_title(&mut self) -> Command<Message> {
         //TODO: filename?
         let title = "COSMIC Media Player";
@@ -604,6 +783,8 @@ impl Application for App {
             fullscreen: false,
             key_binds: key_binds(),
             mpris_opt: None,
+            nav_model: nav_bar::Model::builder().build(),
+            projects: Vec::new(),
             video_opt: None,
             position: 0.0,
             duration: 0.0,
@@ -615,8 +796,23 @@ impl Application for App {
             current_text: -1,
         };
 
+        // Do not show nav bar by default. Will be opened by open_project if needed
+        app.core.nav_bar_set_toggled(false);
+        //TODO: handle command line arguments that are folders?
+
+        // Add button to open a project
+        //TODO: remove and show this based on open projects?
+        app.nav_model
+            .insert()
+            .icon(widget::icon::from_name("folder-open-symbolic").size(16))
+            .text(fl!("open-folder"));
+
         let command = app.load();
         (app, command)
+    }
+
+    fn nav_model(&self) -> Option<&nav_bar::Model> {
+        Some(&self.nav_model)
     }
 
     fn on_escape(&mut self) -> Command<Self::Message> {
@@ -625,6 +821,78 @@ impl Application for App {
         } else {
             Command::none()
         }
+    }
+
+    fn on_nav_select(&mut self, id: nav_bar::Id) -> Command<Message> {
+        // Toggle open state and get clone of node data
+        let node_opt = match self.nav_model.data_mut::<ProjectNode>(id) {
+            Some(node) => {
+                if let ProjectNode::Folder { open, .. } = node {
+                    *open = !*open;
+                }
+                Some(node.clone())
+            }
+            None => None,
+        };
+
+        match node_opt {
+            Some(node) => {
+                // Update icon
+                if let Some(icon) = node.icon(16) {
+                    self.nav_model.icon_set(id, icon);
+                } else {
+                    self.nav_model.icon_remove(id);
+                }
+
+                match node {
+                    ProjectNode::Folder { path, open, .. } => {
+                        let position = self.nav_model.position(id).unwrap_or(0);
+                        let indent = self.nav_model.indent(id).unwrap_or(0);
+                        if open {
+                            // Open folder
+                            self.open_folder(path, position + 1, indent + 1);
+                        } else {
+                            // Close folder
+                            while let Some(child_id) = self.nav_model.entity_at(position + 1) {
+                                if self.nav_model.indent(child_id).unwrap_or(0) > indent {
+                                    self.nav_model.remove(child_id);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Prevent nav bar from closing when selecting a
+                        // folder in condensed mode.
+                        self.core_mut().nav_bar_set_toggled(true);
+
+                        Command::none()
+                    }
+                    ProjectNode::File { path, .. } => match url::Url::from_file_path(&path) {
+                        Ok(url) => self.update(Message::FileLoad(url)),
+                        Err(()) => {
+                            log::warn!("failed to convert {:?} to url", path);
+                            Command::none()
+                        }
+                    },
+                }
+            }
+            None => {
+                // Open folder
+                self.update(Message::FolderOpen)
+            }
+        }
+    }
+
+    fn style(&self) -> Option<theme::Application> {
+        // This ensures we have a solid background color even when using no content container
+        Some(theme::Application::Custom(Box::new(|theme| {
+            iced_style::application::Appearance {
+                background_color: theme.cosmic().bg_color().into(),
+                icon_color: theme.cosmic().on_bg_color().into(),
+                text_color: theme.cosmic().on_bg_color().into(),
+            }
+        })))
     }
 
     /// Handle application events here.
@@ -678,12 +946,75 @@ impl Application for App {
             }
             Message::FileOpenRecent(index) => {
                 if let Some(url) = self.flags.config_state.recent_files.get(index) {
-                    self.flags.url_opt = Some(url.clone());
-                    return self.load();
+                    return self.update(Message::FileLoad(url.clone()));
                 }
             }
-            Message::FolderOpen | Message::FolderOpenRecent(..) => {
-                log::error!("TODO: {:?}", message);
+            Message::FolderClose(project_i) => {
+                if project_i < self.projects.len() {
+                    let (_project_name, project_path) = self.projects.remove(project_i);
+                    let mut position = 0;
+                    let mut closing = false;
+                    while let Some(id) = self.nav_model.entity_at(position) {
+                        match self.nav_model.data::<ProjectNode>(id) {
+                            Some(node) => {
+                                if let ProjectNode::Folder { path, root, .. } = node {
+                                    if path == &project_path {
+                                        // Found the project root node, closing
+                                        closing = true;
+                                    } else if *root && closing {
+                                        // Found another project root node after closing, breaking
+                                        break;
+                                    }
+                                }
+                            }
+                            None => {
+                                if closing {
+                                    break;
+                                }
+                            }
+                        }
+                        if closing {
+                            self.nav_model.remove(id);
+                        } else {
+                            position += 1;
+                        }
+                    }
+                }
+            }
+            Message::FolderLoad(path) => {
+                self.open_project(path);
+            }
+            Message::FolderOpen => {
+                //TODO: embed cosmic-files dialog (after libcosmic rebase works)
+                #[cfg(feature = "xdg-portal")]
+                return Command::perform(
+                    async move {
+                        let dialog = cosmic::dialog::file_chooser::open::Dialog::new()
+                            .title(fl!("open-media-folder"));
+                        match dialog.open_folder().await {
+                            Ok(response) => {
+                                let url = response.url();
+                                match url.to_file_path() {
+                                    Ok(path) => message::app(Message::FolderLoad(path)),
+                                    Err(()) => {
+                                        log::warn!("unsupported folder URL {:?}", url);
+                                        message::none()
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                log::warn!("failed to open folder: {}", err);
+                                message::none()
+                            }
+                        }
+                    },
+                    |x| x,
+                );
+            }
+            Message::FolderOpenRecent(index) => {
+                if let Some(path) = self.flags.config_state.recent_projects.get(index) {
+                    return self.update(Message::FolderLoad(path.clone()));
+                }
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
@@ -882,6 +1213,7 @@ impl Application for App {
             &self.flags.config,
             &self.flags.config_state,
             &self.key_binds,
+            &self.projects,
         )]
     }
 
