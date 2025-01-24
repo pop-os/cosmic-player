@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+dirs = "5"
 gstreamer-tag = "0.23"
 image = "0.24.9"
 lazy_static = "1"

@@ -30,7 +30,7 @@ use std::{
 use tokio::sync::mpsc;
 
 use crate::{
-    config::{Config, CONFIG_VERSION},
+    config::{Config, ConfigState, CONFIG_VERSION},
     key_bind::{key_binds, KeyBind},
 };
 
@@ -85,6 +85,23 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let (config_state_handler, config_state) =
+        match cosmic_config::Config::new_state(App::APP_ID, CONFIG_VERSION) {
+            Ok(config_state_handler) => {
+                let config_state = ConfigState::get_entry(&config_state_handler).unwrap_or_else(
+                    |(errs, config_state)| {
+                        log::info!("errors loading config_state: {:?}", errs);
+                        config_state
+                    },
+                );
+                (Some(config_state_handler), config_state)
+            }
+            Err(err) => {
+                log::error!("failed to create config_state handler: {}", err);
+                (None, ConfigState::default())
+            }
+        };
+
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
@@ -112,6 +129,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        config_state_handler,
+        config_state,
         url_opt,
     };
     cosmic::app::run::<App>(settings, flags)?;
@@ -123,6 +142,9 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub enum Action {
     FileClose,
     FileOpen,
+    FileOpenRecent(usize),
+    FolderOpen,
+    FolderOpenRecent(usize),
     Fullscreen,
     PlayPause,
     SeekBackward,
@@ -137,6 +159,9 @@ impl MenuAction for Action {
         match self {
             Self::FileClose => Message::FileClose,
             Self::FileOpen => Message::FileOpen,
+            Self::FileOpenRecent(index) => Message::FileOpenRecent(*index),
+            Self::FolderOpen => Message::FolderOpen,
+            Self::FolderOpenRecent(index) => Message::FolderOpenRecent(*index),
             Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
@@ -150,6 +175,8 @@ impl MenuAction for Action {
 pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    config_state_handler: Option<cosmic_config::Config>,
+    config_state: ConfigState,
     url_opt: Option<url::Url>,
 }
 
@@ -191,10 +218,14 @@ pub enum MprisEvent {
 pub enum Message {
     None,
     Config(Config),
+    ConfigState(ConfigState),
     DropdownToggle(DropdownKind),
     FileClose,
     FileLoad(url::Url),
     FileOpen,
+    FileOpenRecent(usize),
+    FolderOpen,
+    FolderOpenRecent(usize),
     Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
@@ -272,11 +303,17 @@ impl App {
         }
 
         let url = match &self.flags.url_opt {
-            Some(some) => some,
+            Some(some) => some.clone(),
             None => return Command::none(),
         };
 
         log::info!("Loading {}", url);
+
+        // Add to recent files, ensuring only one entry
+        self.flags.config_state.recent_files.retain(|x| x != &url);
+        self.flags.config_state.recent_files.push_front(url.clone());
+        self.flags.config_state.recent_files.truncate(10);
+        self.save_config_state();
 
         //TODO: this code came from iced_video_player::Video::new and has been modified to stop the pipeline on error
         //TODO: remove unwraps and enable playback of files with only audio.
@@ -385,6 +422,14 @@ impl App {
 
         self.update_mpris_meta();
         self.update_title()
+    }
+
+    fn save_config_state(&mut self) {
+        if let Some(ref config_state_handler) = self.flags.config_state_handler {
+            if let Err(err) = self.flags.config_state.write_entry(config_state_handler) {
+                log::error!("failed to save config_state: {}", err);
+            }
+        }
     }
 
     fn update_controls(&mut self, in_use: bool) {
@@ -593,6 +638,12 @@ impl Application for App {
                     return self.update_config();
                 }
             }
+            Message::ConfigState(config_state) => {
+                if config_state != self.flags.config_state {
+                    log::info!("update config state");
+                    self.flags.config_state = config_state;
+                }
+            }
             Message::DropdownToggle(menu_kind) => {
                 if self.dropdown_opt.take() != Some(menu_kind) {
                     self.dropdown_opt = Some(menu_kind);
@@ -624,6 +675,15 @@ impl Application for App {
                     },
                     |x| x,
                 );
+            }
+            Message::FileOpenRecent(index) => {
+                if let Some(url) = self.flags.config_state.recent_files.get(index) {
+                    self.flags.url_opt = Some(url.clone());
+                    return self.load();
+                }
+            }
+            Message::FolderOpen | Message::FolderOpenRecent(..) => {
+                log::error!("TODO: {:?}", message);
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
@@ -818,7 +878,11 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![menu::menu_bar(&self.flags.config, &self.key_binds)]
+        vec![menu::menu_bar(
+            &self.flags.config,
+            &self.flags.config_state,
+            &self.key_binds,
+        )]
     }
 
     /// Creates a view after each update.
@@ -1094,6 +1158,7 @@ impl Application for App {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ConfigSubscription;
+        struct ConfigStateSubscription;
         struct ThemeSubscription;
 
         let mut subscriptions = vec![
@@ -1113,7 +1178,18 @@ impl Application for App {
                 if !update.errors.is_empty() {
                     log::debug!("errors loading config: {:?}", update.errors);
                 }
-                Message::SystemThemeModeChange(update.config)
+                Message::Config(update.config)
+            }),
+            cosmic_config::config_state_subscription(
+                TypeId::of::<ConfigStateSubscription>(),
+                Self::APP_ID.into(),
+                CONFIG_VERSION,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::debug!("errors loading config state: {:?}", update.errors);
+                }
+                Message::ConfigState(update.config)
             }),
             cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
                 TypeId::of::<ThemeSubscription>(),

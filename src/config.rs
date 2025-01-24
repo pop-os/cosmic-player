@@ -5,6 +5,7 @@ use cosmic::{
     theme,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 pub const CONFIG_VERSION: u64 = 1;
 
@@ -35,6 +36,21 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             app_theme: AppTheme::System,
+        }
+    }
+}
+
+#[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ConfigState {
+    pub recent_files: VecDeque<url::Url>,
+    pub recent_folders: VecDeque<url::Url>,
+}
+
+impl Default for ConfigState {
+    fn default() -> Self {
+        Self {
+            recent_files: VecDeque::new(),
+            recent_folders: VecDeque::new(),
         }
     }
 }

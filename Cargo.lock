@@ -1070,6 +1070,7 @@ dependencies = [
 name = "cosmic-player"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "env_logger",
  "gstreamer-tag",
  "i18n-embed",
