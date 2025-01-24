@@ -240,16 +240,19 @@ pub struct App {
 }
 
 impl App {
-    fn close(&mut self) {
+    fn close(&mut self) -> bool {
         self.album_art_opt = None;
         //TODO: drop does not work well
-        if let Some(mut video) = self.video_opt.take() {
+        let was_open = if let Some(mut video) = self.video_opt.take() {
             log::info!("pausing video");
             video.set_paused(true);
             log::info!("dropping video");
             drop(video);
             log::info!("dropped video");
-        }
+            true
+        } else {
+            false
+        };
         self.position = 0.0;
         self.duration = 0.0;
         self.dragging = false;
@@ -259,10 +262,14 @@ impl App {
         self.text_codes.clear();
         self.current_text = -1;
         self.update_mpris_meta();
+        was_open
     }
 
     fn load(&mut self) -> Command<Message> {
-        self.close();
+        if self.close() {
+            // Allow a redraw before trying to load again, to prevent deadlock
+            return Command::perform(async { message::app(Message::Reload) }, |x| x);
+        }
 
         let url = match &self.flags.url_opt {
             Some(some) => some,
