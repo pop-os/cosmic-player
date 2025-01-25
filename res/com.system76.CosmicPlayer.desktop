@@ -1,6 +1,7 @@
 #TODO: more build-out, desktop actions, translations?
 [Desktop Entry]
 Name=COSMIC Media Player
+Name[hu]=COSMIC Média Lejátszó
 Exec=cosmic-player %u
 Terminal=false
 Type=Application
@@ -9,4 +10,4 @@ MimeType=application/mxf;application/ram;application/sdp;application/vnd.apple.m
 Icon=com.system76.CosmicPlayer
 Categories=COSMIC;AudioVideo;Player;Video;
 Keywords=Audio;Film;Movie;Music;Sound;Video;
-
+Keywords[hu]=hang;film;zene;videó;média;lejátszó;

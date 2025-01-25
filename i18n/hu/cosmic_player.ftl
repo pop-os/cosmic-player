@@ -1,6 +1,7 @@
-audio = Audio
+audio = Hang
 no-video-or-audio-file-open = Nincs videó- vagy hangfájl megnyitva
 open-file = Fájl megnyitása
+open-folder = Mappa megnyitása
 subtitles = Feliratok
 
 # Context Pages
@@ -24,4 +25,5 @@ open-recent-media = Legutóbbi média megnyitása
 close-file = Fájl bezárása
 open-media-folder = Média mappa megnyitása...
 open-recent-media-folder = Legutóbbi média mappa megnyitása
+close-media-folder = Média mappa bezárása
 quit = Kilépés
