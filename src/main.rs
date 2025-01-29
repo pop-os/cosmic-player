@@ -10,10 +10,10 @@ use cosmic::{
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
         subscription::Subscription,
-        window, Alignment, Background, Border, Color, Length, Limits,
+        window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
-    theme,
-    widget::{self, menu::action::MenuAction, Slider},
+    iced_style, theme,
+    widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
     Application, ApplicationExt, Element,
 };
 use iced_video_player::{
@@ -24,19 +24,26 @@ use std::{
     any::TypeId,
     collections::HashMap,
     ffi::{CStr, CString},
-    fs, process, thread,
+    fs,
+    path::{Path, PathBuf},
+    process, thread,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc;
 
 use crate::{
-    config::{Config, CONFIG_VERSION},
+    config::{Config, ConfigState, CONFIG_VERSION},
     key_bind::{key_binds, KeyBind},
+    project::ProjectNode,
 };
 
 mod config;
 mod key_bind;
 mod localize;
 mod menu;
+#[cfg(feature = "mpris-server")]
+mod mpris;
+mod project;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
@@ -82,6 +89,23 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    let (config_state_handler, config_state) =
+        match cosmic_config::Config::new_state(App::APP_ID, CONFIG_VERSION) {
+            Ok(config_state_handler) => {
+                let config_state = ConfigState::get_entry(&config_state_handler).unwrap_or_else(
+                    |(errs, config_state)| {
+                        log::info!("errors loading config_state: {:?}", errs);
+                        config_state
+                    },
+                );
+                (Some(config_state_handler), config_state)
+            }
+            Err(err) => {
+                log::error!("failed to create config_state handler: {}", err);
+                (None, ConfigState::default())
+            }
+        };
+
     let mut settings = Settings::default();
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
@@ -93,12 +117,12 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Ok(path) => match url::Url::from_file_path(&path) {
                     Ok(url) => Some(url),
                     Err(()) => {
-                        log::warn!("failed to parse argument {:?}", arg);
+                        log::warn!("failed to parse path {:?}", path);
                         None
                     }
                 },
-                Err(_) => {
-                    log::warn!("failed to parse argument {:?}", arg);
+                Err(err) => {
+                    log::warn!("failed to parse argument {:?}: {}", arg, err);
                     None
                 }
             },
@@ -109,6 +133,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let flags = Flags {
         config_handler,
         config,
+        config_state_handler,
+        config_state,
         url_opt,
     };
     cosmic::app::run::<App>(settings, flags)?;
@@ -120,6 +146,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub enum Action {
     FileClose,
     FileOpen,
+    FileOpenRecent(usize),
+    FolderClose(usize),
+    FolderOpen,
+    FolderOpenRecent(usize),
     Fullscreen,
     PlayPause,
     SeekBackward,
@@ -134,6 +164,10 @@ impl MenuAction for Action {
         match self {
             Self::FileClose => Message::FileClose,
             Self::FileOpen => Message::FileOpen,
+            Self::FileOpenRecent(index) => Message::FileOpenRecent(*index),
+            Self::FolderClose(index) => Message::FolderClose(*index),
+            Self::FolderOpen => Message::FolderOpen,
+            Self::FolderOpenRecent(index) => Message::FolderOpenRecent(*index),
             Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
@@ -147,6 +181,8 @@ impl MenuAction for Action {
 pub struct Flags {
     config_handler: Option<cosmic_config::Config>,
     config: Config,
+    config_state_handler: Option<cosmic_config::Config>,
+    config_state: ConfigState,
     url_opt: Option<url::Url>,
 }
 
@@ -156,27 +192,63 @@ pub enum DropdownKind {
     Subtitle,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MprisMeta {
+    url_opt: Option<url::Url>,
+    album: String,
+    album_art_opt: Option<url::Url>,
+    album_artist: String,
+    artists: Vec<String>,
+    title: String,
+    disc_number: i32,
+    track_number: i32,
+    duration_micros: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MprisState {
+    fullscreen: bool,
+    position_micros: i64,
+    paused: bool,
+    volume: f64,
+}
+
+#[derive(Clone, Debug)]
+pub enum MprisEvent {
+    Meta(MprisMeta),
+    State(MprisState),
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
     None,
     Config(Config),
+    ConfigState(ConfigState),
     DropdownToggle(DropdownKind),
     FileClose,
     FileLoad(url::Url),
     FileOpen,
+    FileOpenRecent(usize),
+    FolderClose(usize),
+    FolderLoad(PathBuf),
+    FolderOpen,
+    FolderOpenRecent(usize),
     Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
     AudioToggle,
     AudioVolume(f64),
     TextCode(usize),
+    Pause,
+    Play,
     PlayPause,
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
     EndOfStream,
     MissingPlugin(gst::Message),
+    MprisChannel(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>),
     NewFrame,
     Reload,
     ShowControls,
@@ -188,49 +260,71 @@ pub enum Message {
 pub struct App {
     core: Core,
     flags: Flags,
+    album_art_opt: Option<tempfile::NamedTempFile>,
     controls: bool,
     controls_time: Instant,
     dropdown_opt: Option<DropdownKind>,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
+    mpris_opt: Option<(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>)>,
+    nav_model: segmented_button::SingleSelectModel,
+    projects: Vec<(String, PathBuf)>,
     video_opt: Option<Video>,
     position: f64,
     duration: f64,
     dragging: bool,
     audio_codes: Vec<String>,
+    audio_tags: Vec<gst::TagList>,
     current_audio: i32,
     text_codes: Vec<String>,
     current_text: i32,
 }
 
 impl App {
-    fn close(&mut self) {
+    fn close(&mut self) -> bool {
+        self.album_art_opt = None;
         //TODO: drop does not work well
-        if let Some(mut video) = self.video_opt.take() {
+        let was_open = if let Some(mut video) = self.video_opt.take() {
             log::info!("pausing video");
             video.set_paused(true);
             log::info!("dropping video");
             drop(video);
             log::info!("dropped video");
-        }
+            true
+        } else {
+            false
+        };
         self.position = 0.0;
         self.duration = 0.0;
         self.dragging = false;
-        self.audio_codes = Vec::new();
+        self.audio_codes.clear();
+        self.audio_tags.clear();
         self.current_audio = -1;
-        self.text_codes = Vec::new();
+        self.text_codes.clear();
         self.current_text = -1;
+        self.update_mpris_meta();
+        self.update_nav_bar_active();
+        was_open
     }
 
     fn load(&mut self) -> Command<Message> {
-        self.close();
+        if self.close() {
+            // Allow a redraw before trying to load again, to prevent deadlock
+            return Command::perform(async { message::app(Message::Reload) }, |x| x);
+        }
 
         let url = match &self.flags.url_opt {
-            Some(some) => some,
+            Some(some) => some.clone(),
             None => return Command::none(),
         };
 
         log::info!("Loading {}", url);
+
+        // Add to recent files, ensuring only one entry
+        self.flags.config_state.recent_files.retain(|x| x != &url);
+        self.flags.config_state.recent_files.push_front(url.clone());
+        self.flags.config_state.recent_files.truncate(10);
+        self.save_config_state();
 
         //TODO: this code came from iced_video_player::Video::new and has been modified to stop the pipeline on error
         //TODO: remove unwraps and enable playback of files with only audio.
@@ -272,11 +366,17 @@ impl App {
         let pipeline = video.pipeline();
         self.video_opt = Some(video);
 
+        let n_video = pipeline.property::<i32>("n-video");
+        for i in 0..n_video {
+            let tags: gst::TagList = pipeline.emit_by_name("get-video-tags", &[&i]);
+            log::info!("video stream {i}: {tags:#?}");
+        }
+
         let n_audio = pipeline.property::<i32>("n-audio");
         self.audio_codes = Vec::with_capacity(n_audio as usize);
         for i in 0..n_audio {
             let tags: gst::TagList = pipeline.emit_by_name("get-audio-tags", &[&i]);
-            log::info!("audio stream {i}: {tags:?}");
+            log::info!("audio stream {i}: {tags:#?}");
             self.audio_codes
                 .push(if let Some(title) = tags.get::<gst::tags::Title>() {
                     title.get().to_string()
@@ -286,6 +386,7 @@ impl App {
                 } else {
                     format!("Audio #{i}")
                 });
+            self.audio_tags.push(tags);
         }
         self.current_audio = pipeline.property::<i32>("current-audio");
 
@@ -293,7 +394,7 @@ impl App {
         self.text_codes = Vec::with_capacity(n_text as usize);
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
-            log::info!("text stream {i}: {tags:?}");
+            log::info!("text stream {i}: {tags:#?}");
             self.text_codes
                 .push(if let Some(title) = tags.get::<gst::tags::Title>() {
                     title.get().to_string()
@@ -330,20 +431,313 @@ impl App {
         }
         println!("updated flags {:?}", pipeline.property_value("flags"));
 
+        self.update_mpris_meta();
         self.update_title()
     }
 
+    fn open_folder<P: AsRef<Path>>(&mut self, path: P, mut position: u16, indent: u16) {
+        let read_dir = match fs::read_dir(&path) {
+            Ok(ok) => ok,
+            Err(err) => {
+                log::error!("failed to read directory {:?}: {}", path.as_ref(), err);
+                return;
+            }
+        };
+
+        let mut nodes = Vec::new();
+        for entry_res in read_dir {
+            let entry = match entry_res {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::error!(
+                        "failed to read entry in directory {:?}: {}",
+                        path.as_ref(),
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            let entry_path = entry.path();
+            let node = match ProjectNode::new(&entry_path) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    log::error!(
+                        "failed to open directory {:?} entry {:?}: {}",
+                        path.as_ref(),
+                        entry_path,
+                        err
+                    );
+                    continue;
+                }
+            };
+            nodes.push(node);
+        }
+
+        nodes.sort();
+
+        for node in nodes {
+            let mut entity = self
+                .nav_model
+                .insert()
+                .position(position)
+                .indent(indent)
+                .text(node.name().to_string());
+            if let Some(icon) = node.icon(16) {
+                entity = entity.icon(icon);
+            }
+            entity.data(node);
+
+            position += 1;
+        }
+    }
+
+    pub fn open_project<P: AsRef<Path>>(&mut self, path: P) {
+        let path = path.as_ref();
+        let node = match ProjectNode::new(path) {
+            Ok(mut node) => {
+                match &mut node {
+                    ProjectNode::Folder {
+                        name,
+                        path,
+                        open,
+                        root,
+                    } => {
+                        *open = true;
+                        *root = true;
+
+                        for (_project_name, project_path) in self.projects.iter() {
+                            if project_path == path {
+                                // Project already open
+                                return;
+                            }
+                        }
+
+                        // Save the absolute path
+                        self.projects.push((name.to_string(), path.to_path_buf()));
+
+                        // Add to recent projects, ensuring only one entry
+                        self.flags
+                            .config_state
+                            .recent_projects
+                            .retain(|x| x != path);
+                        self.flags
+                            .config_state
+                            .recent_projects
+                            .push_front(path.to_path_buf());
+                        self.flags.config_state.recent_projects.truncate(10);
+                        self.save_config_state();
+
+                        // Open nav bar
+                        self.core.nav_bar_set_toggled(true);
+                    }
+                    _ => {
+                        log::error!("failed to open project {:?}: not a directory", path);
+                        return;
+                    }
+                }
+                node
+            }
+            Err(err) => {
+                log::error!("failed to open project {:?}: {}", path, err);
+                return;
+            }
+        };
+
+        let mut entity = self.nav_model.insert().text(node.name().to_string());
+        if let Some(icon) = node.icon(16) {
+            entity = entity.icon(icon);
+        }
+        entity = entity.data(node);
+
+        let id = entity.id();
+
+        let position = self.nav_model.position(id).unwrap_or(0);
+
+        self.open_folder(path, position + 1, 1);
+    }
+
+    fn save_config_state(&mut self) {
+        if let Some(ref config_state_handler) = self.flags.config_state_handler {
+            if let Err(err) = self.flags.config_state.write_entry(config_state_handler) {
+                log::error!("failed to save config_state: {}", err);
+            }
+        }
+    }
+
     fn update_controls(&mut self, in_use: bool) {
-        if in_use {
+        if in_use
+            || !self
+                .video_opt
+                .as_ref()
+                .map_or(false, |video| video.has_video())
+        {
             self.controls = true;
             self.controls_time = Instant::now();
         } else if self.controls && self.controls_time.elapsed() > CONTROLS_TIMEOUT {
             self.controls = false;
         }
+        self.update_mpris_state();
     }
 
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
+    }
+
+    fn update_mpris_meta(&mut self) {
+        if let Some((old, _, tx)) = &mut self.mpris_opt {
+            let mut new = MprisMeta {
+                //TODO: clear url_opt when file is closed
+                url_opt: self.flags.url_opt.clone(),
+                duration_micros: (self.duration * 1_000_000.0) as i64,
+                ..Default::default()
+            };
+            //TODO: use any other stream tags?
+            if let Some(tags) = self.audio_tags.get(0) {
+                log::info!("{:#?}", tags);
+                if let Some(tag) = tags.get::<gst::tags::Album>() {
+                    new.album = tag.get().into();
+                }
+                if let Some(tag) = tags.get::<gst::tags::AlbumArtist>() {
+                    new.album_artist = tag.get().into();
+                }
+                if let Some(tag) = tags.get::<gst::tags::Artist>() {
+                    //TODO: how are multiple artists handled by gstreamer?
+                    new.artists = vec![tag.get().into()];
+                }
+                if let Some(tag) = tags.get::<gst::tags::Title>() {
+                    new.title = tag.get().into();
+                }
+                /*TODO: no gstreamer tag
+                if let Some(tag) = tags.get::<gst::tags::DiscNumber>() {
+                    new.disc_number = tag.get();
+                }
+                */
+                if let Some(tag) = tags.get::<gst::tags::TrackNumber>() {
+                    new.track_number = tag.get() as i32;
+                }
+                if self.album_art_opt.is_none() {
+                    //TODO: run in thread or async to avoid blocking UI?
+                    if let Some(tag) = tags.get::<gst::tags::Image>() {
+                        let sample = tag.get();
+                        if let Some(buffer) = sample.buffer() {
+                            match buffer.map_readable() {
+                                //TODO: use original format instead of converting to PNG?
+                                Ok(buffer_map) => match image::load_from_memory(&buffer_map) {
+                                    Ok(image) => {
+                                        match tempfile::Builder::new()
+                                            .prefix(&format!("cosmic-player.pid{}.", process::id()))
+                                            .suffix(".png")
+                                            .tempfile()
+                                        {
+                                            Ok(mut album_art) => {
+                                                match image.write_with_encoder(
+                                                    image::codecs::png::PngEncoder::new(
+                                                        &mut album_art,
+                                                    ),
+                                                ) {
+                                                    Ok(()) => self.album_art_opt = Some(album_art),
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "failed to write temporary image: {}",
+                                                            err
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            Err(err) => {
+                                                log::warn!(
+                                                    "failed to create temporary image: {}",
+                                                    err
+                                                );
+                                            }
+                                        }
+                                    }
+                                    Err(err) => {
+                                        log::warn!("failed to load image from memory: {}", err);
+                                    }
+                                },
+                                Err(err) => {
+                                    log::warn!("failed to map image buffer: {}", err);
+                                }
+                            }
+                        }
+                    }
+                }
+                if let Some(album_art) = &self.album_art_opt {
+                    new.album_art_opt = url::Url::from_file_path(album_art.path()).ok();
+                }
+            }
+            if new != *old {
+                *old = new.clone();
+                let _ = tx.send(MprisEvent::Meta(new));
+            }
+        }
+    }
+
+    fn update_mpris_state(&mut self) {
+        if let Some((_, old, tx)) = &mut self.mpris_opt {
+            let mut new = MprisState {
+                fullscreen: self.fullscreen,
+                position_micros: (self.position * 1_000_000.0) as i64,
+                paused: true,
+                volume: 0.0,
+            };
+            if let Some(video) = &self.video_opt {
+                new.paused = video.paused();
+                new.volume = video.volume();
+            }
+            if new != *old {
+                *old = new.clone();
+                let _ = tx.send(MprisEvent::State(new));
+            }
+        }
+    }
+
+    fn update_nav_bar_active(&mut self) {
+        let tab_path_opt = match &self.flags.url_opt {
+            Some(url) => url.to_file_path().ok(),
+            None => None,
+        };
+
+        // Locate tree node to activate
+        let mut active_id = segmented_button::Entity::default();
+
+        if let Some(tab_path) = tab_path_opt {
+            // Automatically expand tree to find and select active file
+            loop {
+                let mut expand_opt = None;
+                for id in self.nav_model.iter() {
+                    if let Some(node) = self.nav_model.data(id) {
+                        match node {
+                            ProjectNode::Folder { path, open, .. } => {
+                                if tab_path.starts_with(path) && !*open {
+                                    expand_opt = Some(id);
+                                    break;
+                                }
+                            }
+                            ProjectNode::File { path, .. } => {
+                                if path == &tab_path {
+                                    active_id = id;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                match expand_opt {
+                    Some(id) => {
+                        //TODO: can this be optimized?
+                        // Task not used becuase opening a folder just returns Task::none
+                        let _ = self.on_nav_select(id);
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+        }
+        self.nav_model.activate(active_id);
     }
 
     fn update_title(&mut self) -> Command<Message> {
@@ -382,23 +776,43 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
+            album_art_opt: None,
             controls: true,
             controls_time: Instant::now(),
             dropdown_opt: None,
             fullscreen: false,
             key_binds: key_binds(),
+            mpris_opt: None,
+            nav_model: nav_bar::Model::builder().build(),
+            projects: Vec::new(),
             video_opt: None,
             position: 0.0,
             duration: 0.0,
             dragging: false,
             audio_codes: Vec::new(),
+            audio_tags: Vec::new(),
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: -1,
         };
 
+        // Do not show nav bar by default. Will be opened by open_project if needed
+        app.core.nav_bar_set_toggled(false);
+        //TODO: handle command line arguments that are folders?
+
+        // Add button to open a project
+        //TODO: remove and show this based on open projects?
+        app.nav_model
+            .insert()
+            .icon(widget::icon::from_name("folder-open-symbolic").size(16))
+            .text(fl!("open-folder"));
+
         let command = app.load();
         (app, command)
+    }
+
+    fn nav_model(&self) -> Option<&nav_bar::Model> {
+        Some(&self.nav_model)
     }
 
     fn on_escape(&mut self) -> Command<Self::Message> {
@@ -407,6 +821,78 @@ impl Application for App {
         } else {
             Command::none()
         }
+    }
+
+    fn on_nav_select(&mut self, id: nav_bar::Id) -> Command<Message> {
+        // Toggle open state and get clone of node data
+        let node_opt = match self.nav_model.data_mut::<ProjectNode>(id) {
+            Some(node) => {
+                if let ProjectNode::Folder { open, .. } = node {
+                    *open = !*open;
+                }
+                Some(node.clone())
+            }
+            None => None,
+        };
+
+        match node_opt {
+            Some(node) => {
+                // Update icon
+                if let Some(icon) = node.icon(16) {
+                    self.nav_model.icon_set(id, icon);
+                } else {
+                    self.nav_model.icon_remove(id);
+                }
+
+                match node {
+                    ProjectNode::Folder { path, open, .. } => {
+                        let position = self.nav_model.position(id).unwrap_or(0);
+                        let indent = self.nav_model.indent(id).unwrap_or(0);
+                        if open {
+                            // Open folder
+                            self.open_folder(path, position + 1, indent + 1);
+                        } else {
+                            // Close folder
+                            while let Some(child_id) = self.nav_model.entity_at(position + 1) {
+                                if self.nav_model.indent(child_id).unwrap_or(0) > indent {
+                                    self.nav_model.remove(child_id);
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Prevent nav bar from closing when selecting a
+                        // folder in condensed mode.
+                        self.core_mut().nav_bar_set_toggled(true);
+
+                        Command::none()
+                    }
+                    ProjectNode::File { path, .. } => match url::Url::from_file_path(&path) {
+                        Ok(url) => self.update(Message::FileLoad(url)),
+                        Err(()) => {
+                            log::warn!("failed to convert {:?} to url", path);
+                            Command::none()
+                        }
+                    },
+                }
+            }
+            None => {
+                // Open folder
+                self.update(Message::FolderOpen)
+            }
+        }
+    }
+
+    fn style(&self) -> Option<theme::Application> {
+        // This ensures we have a solid background color even when using no content container
+        Some(theme::Application::Custom(Box::new(|theme| {
+            iced_style::application::Appearance {
+                background_color: theme.cosmic().bg_color().into(),
+                icon_color: theme.cosmic().on_bg_color().into(),
+                text_color: theme.cosmic().on_bg_color().into(),
+            }
+        })))
     }
 
     /// Handle application events here.
@@ -418,6 +904,12 @@ impl Application for App {
                     log::info!("update config");
                     self.flags.config = config;
                     return self.update_config();
+                }
+            }
+            Message::ConfigState(config_state) => {
+                if config_state != self.flags.config_state {
+                    log::info!("update config state");
+                    self.flags.config_state = config_state;
                 }
             }
             Message::DropdownToggle(menu_kind) => {
@@ -451,6 +943,78 @@ impl Application for App {
                     },
                     |x| x,
                 );
+            }
+            Message::FileOpenRecent(index) => {
+                if let Some(url) = self.flags.config_state.recent_files.get(index) {
+                    return self.update(Message::FileLoad(url.clone()));
+                }
+            }
+            Message::FolderClose(project_i) => {
+                if project_i < self.projects.len() {
+                    let (_project_name, project_path) = self.projects.remove(project_i);
+                    let mut position = 0;
+                    let mut closing = false;
+                    while let Some(id) = self.nav_model.entity_at(position) {
+                        match self.nav_model.data::<ProjectNode>(id) {
+                            Some(node) => {
+                                if let ProjectNode::Folder { path, root, .. } = node {
+                                    if path == &project_path {
+                                        // Found the project root node, closing
+                                        closing = true;
+                                    } else if *root && closing {
+                                        // Found another project root node after closing, breaking
+                                        break;
+                                    }
+                                }
+                            }
+                            None => {
+                                if closing {
+                                    break;
+                                }
+                            }
+                        }
+                        if closing {
+                            self.nav_model.remove(id);
+                        } else {
+                            position += 1;
+                        }
+                    }
+                }
+            }
+            Message::FolderLoad(path) => {
+                self.open_project(path);
+            }
+            Message::FolderOpen => {
+                //TODO: embed cosmic-files dialog (after libcosmic rebase works)
+                #[cfg(feature = "xdg-portal")]
+                return Command::perform(
+                    async move {
+                        let dialog = cosmic::dialog::file_chooser::open::Dialog::new()
+                            .title(fl!("open-media-folder"));
+                        match dialog.open_folder().await {
+                            Ok(response) => {
+                                let url = response.url();
+                                match url.to_file_path() {
+                                    Ok(path) => message::app(Message::FolderLoad(path)),
+                                    Err(()) => {
+                                        log::warn!("unsupported folder URL {:?}", url);
+                                        message::none()
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                log::warn!("failed to open folder: {}", err);
+                                message::none()
+                            }
+                        }
+                    },
+                    |x| x,
+                );
+            }
+            Message::FolderOpenRecent(index) => {
+                if let Some(path) = self.flags.config_state.recent_projects.get(index) {
+                    return self.update(Message::FolderLoad(path.clone()));
+                }
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
@@ -491,8 +1055,10 @@ impl Application for App {
             }
             Message::AudioVolume(volume) => {
                 if let Some(video) = &mut self.video_opt {
-                    video.set_volume(volume);
-                    self.update_controls(true);
+                    if volume >= 0.0 && volume <= 1.0 {
+                        video.set_volume(volume);
+                        self.update_controls(true);
+                    }
                 }
             }
             Message::TextCode(code) => {
@@ -504,12 +1070,16 @@ impl Application for App {
                     }
                 }
             }
-            Message::PlayPause => {
+            Message::Pause | Message::Play | Message::PlayPause => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
 
                 if let Some(video) = &mut self.video_opt {
-                    video.set_paused(!video.paused());
+                    video.set_paused(match message {
+                        Message::Play => false,
+                        Message::Pause => true,
+                        _ => !video.paused(),
+                    });
                     self.update_controls(true);
                 }
             }
@@ -609,6 +1179,11 @@ impl Application for App {
                     |x| x,
                 );
             }
+            Message::MprisChannel(meta, state, tx) => {
+                self.mpris_opt = Some((meta, state, tx));
+                self.update_mpris_meta();
+                self.update_mpris_state();
+            }
             Message::NewFrame => {
                 if let Some(video) = &self.video_opt {
                     if !self.dragging {
@@ -634,7 +1209,12 @@ impl Application for App {
     }
 
     fn header_start(&self) -> Vec<Element<Self::Message>> {
-        vec![menu::menu_bar(&self.flags.config, &self.key_binds)]
+        vec![menu::menu_bar(
+            &self.flags.config,
+            &self.flags.config_state,
+            &self.key_binds,
+            &self.projects,
+        )]
     }
 
     /// Creates a view after each update.
@@ -655,8 +1235,24 @@ impl Application for App {
         };
 
         let Some(video) = &self.video_opt else {
-            //TODO: open button if no video?
-            return widget::container(widget::text("No video open"))
+            //TODO: use space variables
+            let column = widget::column::with_capacity(4)
+                .align_items(Alignment::Center)
+                .spacing(24)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(widget::vertical_space(Length::Fill))
+                .push(
+                    widget::column::with_capacity(2)
+                        .align_items(Alignment::Center)
+                        .spacing(8)
+                        .push(widget::icon::from_name("folder-symbolic").size(64))
+                        .push(widget::text::body(fl!("no-video-or-audio-file-open"))),
+                )
+                .push(widget::button::suggested(fl!("open-file")).on_press(Message::FileOpen))
+                .push(widget::vertical_space(Length::Fill));
+
+            return widget::container(column)
                 .width(Length::Fill)
                 .height(Length::Fill)
                 .style(theme::Container::WindowBackground)
@@ -666,20 +1262,36 @@ impl Application for App {
         let muted = video.muted();
         let volume = video.volume();
 
-        let video_player = VideoPlayer::new(video)
+        let mut video_player: Element<_> = VideoPlayer::new(video)
             .mouse_hidden(!self.controls)
             .on_end_of_stream(Message::EndOfStream)
             .on_missing_plugin(Message::MissingPlugin)
             .on_new_frame(Message::NewFrame)
             .width(Length::Fill)
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .into();
+
+        if let Some(album_art) = &self.album_art_opt {
+            if !video.has_video() {
+                // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
+                video_player = widget::column::with_children(vec![
+                    widget::image(widget::image::Handle::from_path(album_art.path()))
+                        .content_fit(ContentFit::ScaleDown)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .into(),
+                    widget::container(video_player).height(space_m).into(),
+                ])
+                .into();
+            }
+        }
 
         let mouse_area = widget::mouse_area(video_player)
             .on_press(Message::PlayPause)
             .on_double_press(Message::Fullscreen);
 
         let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
-        let mut popup_items = Vec::<Element<_>>::with_capacity(2);
+        let mut popup_items = Vec::<Element<_>>::with_capacity(3);
         if let Some(dropdown) = self.dropdown_opt {
             let mut items = Vec::<Element<_>>::new();
             match dropdown {
@@ -773,70 +1385,95 @@ impl Application for App {
             );
         }
         if self.controls {
-            popup_items.push(
-                widget::container(
-                    widget::row::with_capacity(7)
-                        .align_items(Alignment::Center)
-                        .spacing(space_xxs)
-                        .push(
-                            widget::button::icon(
-                                if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
-                                    widget::icon::from_name("media-playback-start-symbolic")
-                                        .size(16)
-                                } else {
-                                    widget::icon::from_name("media-playback-pause-symbolic")
-                                        .size(16)
-                                },
-                            )
-                            .on_press(Message::PlayPause),
-                        )
-                        .push(widget::text(format_time(self.position)).font(font::mono()))
-                        .push(
-                            Slider::new(0.0..=self.duration, self.position, Message::Seek)
-                                .step(0.1)
-                                .on_release(Message::SeekRelease),
-                        )
-                        .push(
-                            widget::text(format_time(self.duration - self.position))
-                                .font(font::mono()),
-                        )
-                        .push(
-                            widget::button::icon(
-                                widget::icon::from_name("media-view-subtitles-symbolic").size(16),
-                            )
-                            .on_press(Message::DropdownToggle(DropdownKind::Subtitle)),
-                        )
-                        .push(
-                            widget::button::icon(
-                                widget::icon::from_name("view-fullscreen-symbolic").size(16),
-                            )
-                            .on_press(Message::Fullscreen),
-                        )
-                        .push(
-                            //TODO: scroll up/down on icon to change volume
-                            widget::button::icon(
-                                widget::icon::from_name({
-                                    if muted {
-                                        "audio-volume-muted-symbolic"
-                                    } else {
-                                        if volume >= (2.0 / 3.0) {
-                                            "audio-volume-high-symbolic"
-                                        } else if volume >= (1.0 / 3.0) {
-                                            "audio-volume-medium-symbolic"
-                                        } else {
-                                            "audio-volume-low-symbolic"
-                                        }
-                                    }
-                                })
-                                .size(16),
-                            )
-                            .on_press(Message::DropdownToggle(DropdownKind::Audio)),
-                        ),
+            let mut row = widget::row::with_capacity(7)
+                .align_items(Alignment::Center)
+                .spacing(space_xxs)
+                .push(
+                    widget::button::icon(
+                        if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                            widget::icon::from_name("media-playback-start-symbolic").size(16)
+                        } else {
+                            widget::icon::from_name("media-playback-pause-symbolic").size(16)
+                        },
+                    )
+                    .on_press(Message::PlayPause),
+                );
+            if self.core.is_condensed() {
+                row = row.push(widget::horizontal_space(Length::Fill));
+            } else {
+                row = row
+                    .push(widget::text(format_time(self.position)).font(font::mono()))
+                    .push(
+                        Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                            .step(0.1)
+                            .on_release(Message::SeekRelease),
+                    )
+                    .push(
+                        widget::text(format_time(self.duration - self.position)).font(font::mono()),
+                    );
+            }
+            row = row
+                .push(
+                    widget::button::icon(
+                        widget::icon::from_name("media-view-subtitles-symbolic").size(16),
+                    )
+                    .on_press(Message::DropdownToggle(DropdownKind::Subtitle)),
                 )
-                .padding([space_xxs, space_xs])
-                .style(theme::Container::WindowBackground)
-                .into(),
+                .push(
+                    widget::button::icon(
+                        widget::icon::from_name("view-fullscreen-symbolic").size(16),
+                    )
+                    .on_press(Message::Fullscreen),
+                )
+                .push(
+                    //TODO: scroll up/down on icon to change volume
+                    widget::button::icon(
+                        widget::icon::from_name({
+                            if muted {
+                                "audio-volume-muted-symbolic"
+                            } else {
+                                if volume >= (2.0 / 3.0) {
+                                    "audio-volume-high-symbolic"
+                                } else if volume >= (1.0 / 3.0) {
+                                    "audio-volume-medium-symbolic"
+                                } else {
+                                    "audio-volume-low-symbolic"
+                                }
+                            }
+                        })
+                        .size(16),
+                    )
+                    .on_press(Message::DropdownToggle(DropdownKind::Audio)),
+                );
+            popup_items.push(
+                widget::container(row)
+                    .padding([space_xxs, space_xs])
+                    .style(theme::Container::WindowBackground)
+                    .into(),
             );
+
+            if self.core.is_condensed() {
+                popup_items.push(
+                    widget::container(
+                        widget::row::with_capacity(3)
+                            .align_items(Alignment::Center)
+                            .spacing(space_xxs)
+                            .push(widget::text(format_time(self.position)).font(font::mono()))
+                            .push(
+                                Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                                    .step(0.1)
+                                    .on_release(Message::SeekRelease),
+                            )
+                            .push(
+                                widget::text(format_time(self.duration - self.position))
+                                    .font(font::mono()),
+                            ),
+                    )
+                    .padding([space_xxs, space_xs])
+                    .style(theme::Container::WindowBackground)
+                    .into(),
+                );
+            }
         }
         if !popup_items.is_empty() {
             popover = popover.popup(widget::column::with_children(popup_items));
@@ -853,9 +1490,10 @@ impl Application for App {
 
     fn subscription(&self) -> Subscription<Self::Message> {
         struct ConfigSubscription;
+        struct ConfigStateSubscription;
         struct ThemeSubscription;
 
-        Subscription::batch([
+        let mut subscriptions = vec![
             event::listen_with(|event, _status| match event {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
                     Some(Message::Key(modifiers, key))
@@ -872,7 +1510,18 @@ impl Application for App {
                 if !update.errors.is_empty() {
                     log::debug!("errors loading config: {:?}", update.errors);
                 }
-                Message::SystemThemeModeChange(update.config)
+                Message::Config(update.config)
+            }),
+            cosmic_config::config_state_subscription(
+                TypeId::of::<ConfigStateSubscription>(),
+                Self::APP_ID.into(),
+                CONFIG_VERSION,
+            )
+            .map(|update| {
+                if !update.errors.is_empty() {
+                    log::debug!("errors loading config state: {:?}", update.errors);
+                }
+                Message::ConfigState(update.config)
             }),
             cosmic_config::config_subscription::<_, cosmic_theme::ThemeMode>(
                 TypeId::of::<ThemeSubscription>(),
@@ -885,6 +1534,13 @@ impl Application for App {
                 }
                 Message::SystemThemeModeChange(update.config)
             }),
-        ])
+        ];
+
+        #[cfg(feature = "mpris-server")]
+        {
+            subscriptions.push(mpris::subscription());
+        }
+
+        Subscription::batch(subscriptions)
     }
 }
