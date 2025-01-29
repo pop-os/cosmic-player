@@ -7,7 +7,7 @@ subtitles = Ondertiteling
 settings = Instellingen
 
 ### Appearance
-appearance = Uiterlijk
+appearance = Weergave
 theme = Thema
 match-desktop = Systeemstandaard
 dark = Donker
