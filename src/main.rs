@@ -198,6 +198,7 @@ pub struct MprisMeta {
     album: String,
     album_art_opt: Option<url::Url>,
     album_artist: String,
+    album_year_opt: Option<i32>,
     artists: Vec<String>,
     title: String,
     disc_number: i32,
@@ -266,6 +267,7 @@ pub struct App {
     dropdown_opt: Option<DropdownKind>,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
+    mpris_meta: MprisMeta,
     mpris_opt: Option<(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>)>,
     nav_model: segmented_button::SingleSelectModel,
     projects: Vec<(String, PathBuf)>,
@@ -585,94 +587,93 @@ impl App {
     }
 
     fn update_mpris_meta(&mut self) {
-        if let Some((old, _, tx)) = &mut self.mpris_opt {
-            let mut new = MprisMeta {
-                //TODO: clear url_opt when file is closed
-                url_opt: self.flags.url_opt.clone(),
-                duration_micros: (self.duration * 1_000_000.0) as i64,
-                ..Default::default()
-            };
-            //TODO: use any other stream tags?
-            if let Some(tags) = self.audio_tags.get(0) {
-                log::info!("{:#?}", tags);
-                if let Some(tag) = tags.get::<gst::tags::Album>() {
-                    new.album = tag.get().into();
-                }
-                if let Some(tag) = tags.get::<gst::tags::AlbumArtist>() {
-                    new.album_artist = tag.get().into();
-                }
-                if let Some(tag) = tags.get::<gst::tags::Artist>() {
-                    //TODO: how are multiple artists handled by gstreamer?
-                    new.artists = vec![tag.get().into()];
-                }
-                if let Some(tag) = tags.get::<gst::tags::Title>() {
-                    new.title = tag.get().into();
-                }
-                /*TODO: no gstreamer tag
-                if let Some(tag) = tags.get::<gst::tags::DiscNumber>() {
-                    new.disc_number = tag.get();
-                }
-                */
-                if let Some(tag) = tags.get::<gst::tags::TrackNumber>() {
-                    new.track_number = tag.get() as i32;
-                }
-                if self.album_art_opt.is_none() {
-                    //TODO: run in thread or async to avoid blocking UI?
-                    if let Some(tag) = tags.get::<gst::tags::Image>() {
-                        let sample = tag.get();
-                        if let Some(buffer) = sample.buffer() {
-                            match buffer.map_readable() {
-                                //TODO: use original format instead of converting to PNG?
-                                Ok(buffer_map) => match image::load_from_memory(&buffer_map) {
-                                    Ok(image) => {
-                                        match tempfile::Builder::new()
-                                            .prefix(&format!("cosmic-player.pid{}.", process::id()))
-                                            .suffix(".png")
-                                            .tempfile()
-                                        {
-                                            Ok(mut album_art) => {
-                                                match image.write_with_encoder(
-                                                    image::codecs::png::PngEncoder::new(
-                                                        &mut album_art,
-                                                    ),
-                                                ) {
-                                                    Ok(()) => self.album_art_opt = Some(album_art),
-                                                    Err(err) => {
-                                                        log::warn!(
-                                                            "failed to write temporary image: {}",
-                                                            err
-                                                        );
-                                                    }
+        let mut new = MprisMeta {
+            //TODO: clear url_opt when file is closed
+            url_opt: self.flags.url_opt.clone(),
+            duration_micros: (self.duration * 1_000_000.0) as i64,
+            ..Default::default()
+        };
+        //TODO: use any other stream tags?
+        if let Some(tags) = self.audio_tags.get(0) {
+            log::info!("{:#?}", tags);
+            if let Some(tag) = tags.get::<gst::tags::Album>() {
+                new.album = tag.get().into();
+            }
+            if let Some(tag) = tags.get::<gst::tags::AlbumArtist>() {
+                new.album_artist = tag.get().into();
+            }
+            if let Some(tag) = tags.get::<gst::tags::DateTime>() {
+                new.album_year_opt = Some(tag.get().year());
+            }
+            if let Some(tag) = tags.get::<gst::tags::Artist>() {
+                //TODO: how are multiple artists handled by gstreamer?
+                new.artists = vec![tag.get().into()];
+            }
+            if let Some(tag) = tags.get::<gst::tags::Title>() {
+                new.title = tag.get().into();
+            }
+            /*TODO: no gstreamer tag
+            if let Some(tag) = tags.get::<gst::tags::DiscNumber>() {
+                new.disc_number = tag.get();
+            }
+            */
+            if let Some(tag) = tags.get::<gst::tags::TrackNumber>() {
+                new.track_number = tag.get() as i32;
+            }
+            if self.album_art_opt.is_none() {
+                //TODO: run in thread or async to avoid blocking UI?
+                if let Some(tag) = tags.get::<gst::tags::Image>() {
+                    let sample = tag.get();
+                    if let Some(buffer) = sample.buffer() {
+                        match buffer.map_readable() {
+                            //TODO: use original format instead of converting to PNG?
+                            Ok(buffer_map) => match image::load_from_memory(&buffer_map) {
+                                Ok(image) => {
+                                    match tempfile::Builder::new()
+                                        .prefix(&format!("cosmic-player.pid{}.", process::id()))
+                                        .suffix(".png")
+                                        .tempfile()
+                                    {
+                                        Ok(mut album_art) => {
+                                            match image.write_with_encoder(
+                                                image::codecs::png::PngEncoder::new(&mut album_art),
+                                            ) {
+                                                Ok(()) => self.album_art_opt = Some(album_art),
+                                                Err(err) => {
+                                                    log::warn!(
+                                                        "failed to write temporary image: {}",
+                                                        err
+                                                    );
                                                 }
                                             }
-                                            Err(err) => {
-                                                log::warn!(
-                                                    "failed to create temporary image: {}",
-                                                    err
-                                                );
-                                            }
+                                        }
+                                        Err(err) => {
+                                            log::warn!("failed to create temporary image: {}", err);
                                         }
                                     }
-                                    Err(err) => {
-                                        log::warn!("failed to load image from memory: {}", err);
-                                    }
-                                },
-                                Err(err) => {
-                                    log::warn!("failed to map image buffer: {}", err);
                                 }
+                                Err(err) => {
+                                    log::warn!("failed to load image from memory: {}", err);
+                                }
+                            },
+                            Err(err) => {
+                                log::warn!("failed to map image buffer: {}", err);
                             }
                         }
                     }
                 }
-                if let Some(album_art) = &self.album_art_opt {
-                    new.album_art_opt = url::Url::from_file_path(album_art.path()).ok();
-                }
             }
-            if new != *old {
-                *old = new.clone();
-                let _ = tx.send(MprisEvent::Meta(new));
+            if let Some(album_art) = &self.album_art_opt {
+                new.album_art_opt = url::Url::from_file_path(album_art.path()).ok();
             }
         }
+        if let Some((old, _, tx)) = &mut self.mpris_opt {
+            if new != *old {
+                *old = new.clone();
+                let _ = tx.send(MprisEvent::Meta(new.clone()));
+            }
+        }
+        self.mpris_meta = new;
     }
 
     fn update_mpris_state(&mut self) {
@@ -782,6 +783,7 @@ impl Application for App {
             dropdown_opt: None,
             fullscreen: false,
             key_binds: key_binds(),
+            mpris_meta: MprisMeta::default(),
             mpris_opt: None,
             nav_model: nav_bar::Model::builder().build(),
             projects: Vec::new(),
@@ -1222,6 +1224,7 @@ impl Application for App {
         let cosmic_theme::Spacing {
             space_xxs,
             space_xs,
+            space_s,
             space_m,
             ..
         } = theme::active().cosmic().spacing;
@@ -1273,14 +1276,46 @@ impl Application for App {
 
         if let Some(album_art) = &self.album_art_opt {
             if !video.has_video() {
-                // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
-                video_player = widget::column::with_children(vec![
+                let mut col = widget::column();
+                col = col.push(widget::vertical_space(Length::Fill));
+                col = col.push(
                     widget::image(widget::image::Handle::from_path(album_art.path()))
                         .content_fit(ContentFit::ScaleDown)
-                        .width(Length::Fill)
-                        .height(Length::Fill)
-                        .into(),
-                    widget::container(video_player).height(space_m).into(),
+                        .width(Length::Fill),
+                );
+                col = col.push(widget::vertical_space(space_s));
+                //TODO: fallback if title missing
+                col = col.push(widget::text::title4(&self.mpris_meta.title));
+                for artist in self.mpris_meta.artists.iter() {
+                    col = col.push(widget::text::body(artist));
+                }
+                col = col.push(widget::vertical_space(space_s));
+                if !self.mpris_meta.album.is_empty() {
+                    col = col.push(widget::text::body(fl!(
+                        "album",
+                        album = self.mpris_meta.album.as_str()
+                    )));
+                }
+                if let Some(year) = &self.mpris_meta.album_year_opt {
+                    col = col.push(widget::text::body(format!("{}", year)));
+                }
+                col = col.push(widget::vertical_space(Length::Fill));
+
+                // Space to keep from going under control overlay
+                let mut control_height = space_xxs + 32 + space_xxs;
+                if self.core.is_condensed() {
+                    control_height += space_xxs + 32;
+                }
+
+                // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
+                video_player = widget::row::with_children(vec![
+                    widget::horizontal_space(Length::Fill).into(),
+                    widget::container(
+                        col.push(widget::container(video_player).height(control_height)),
+                    )
+                    .width(320)
+                    .into(),
+                    widget::horizontal_space(Length::Fill).into(),
                 ])
                 .into();
             }
