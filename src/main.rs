@@ -1289,12 +1289,21 @@ impl Application for App {
                         .content_fit(ContentFit::ScaleDown)
                         .width(Length::Fill),
                 );
+            } else {
+                col = col.push(widget::icon::from_name("audio-x-generic-symbolic").size(256));
             }
             col = col.push(widget::vertical_space(space_s));
-            //TODO: fallback if title missing
-            col = col.push(widget::text::title4(&self.mpris_meta.title));
-            for artist in self.mpris_meta.artists.iter() {
-                col = col.push(widget::text::body(artist));
+            if self.mpris_meta.title.is_empty() {
+                col = col.push(widget::text::title4(fl!("untitled")));
+            } else {
+                col = col.push(widget::text::title4(&self.mpris_meta.title));
+            }
+            if self.mpris_meta.artists.is_empty() {
+                col = col.push(widget::text::body(fl!("unknown-author")));
+            } else {
+                for artist in self.mpris_meta.artists.iter() {
+                    col = col.push(widget::text::body(artist));
+                }
             }
             col = col.push(widget::vertical_space(space_s));
             if !self.mpris_meta.album.is_empty() {

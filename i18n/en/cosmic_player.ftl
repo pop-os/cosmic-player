@@ -4,6 +4,8 @@ no-video-or-audio-file-open = No video or audio file open
 open-file = Open file
 open-folder = Open folder
 subtitles = Subtitles
+unknown-author = Unknown Author
+untitled = Untitled
 
 # Context Pages
 
