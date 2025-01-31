@@ -1221,13 +1221,14 @@ impl Application for App {
 
     /// Creates a view after each update.
     fn view(&self) -> Element<Self::Message> {
+        let theme = theme::active();
         let cosmic_theme::Spacing {
             space_xxs,
             space_xs,
             space_s,
             space_m,
             ..
-        } = theme::active().cosmic().spacing;
+        } = theme.cosmic().spacing;
 
         let format_time = |time_float: f64| -> String {
             let time = time_float.floor() as i64;
@@ -1274,8 +1275,11 @@ impl Application for App {
             .height(Length::Fill)
             .into();
 
+        let mut background_color = Color::BLACK;
         if let Some(album_art) = &self.album_art_opt {
             if !video.has_video() {
+                background_color = theme.cosmic().bg_component_color().into();
+
                 let mut col = widget::column();
                 col = col.push(widget::vertical_space(Length::Fill));
                 col = col.push(
@@ -1517,8 +1521,8 @@ impl Application for App {
         widget::container(popover)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(theme::Container::Custom(Box::new(|_theme| {
-                widget::container::Appearance::default().with_background(Color::BLACK)
+            .style(theme::Container::Custom(Box::new(move |_theme| {
+                widget::container::Appearance::default().with_background(background_color)
             })))
             .into()
     }
