@@ -1276,53 +1276,53 @@ impl Application for App {
             .into();
 
         let mut background_color = Color::BLACK;
-        if let Some(album_art) = &self.album_art_opt {
-            if !video.has_video() {
-                background_color = theme.cosmic().bg_component_color().into();
+        let mut text_color_opt = None;
+        if !video.has_video() {
+            background_color = theme.cosmic().bg_component_color().into();
+            text_color_opt = Some(Color::from(theme.cosmic().on_bg_component_color()));
 
-                let mut col = widget::column();
-                col = col.push(widget::vertical_space(Length::Fill));
+            let mut col = widget::column();
+            col = col.push(widget::vertical_space(Length::Fill));
+            if let Some(album_art) = &self.album_art_opt {
                 col = col.push(
                     widget::image(widget::image::Handle::from_path(album_art.path()))
                         .content_fit(ContentFit::ScaleDown)
                         .width(Length::Fill),
                 );
-                col = col.push(widget::vertical_space(space_s));
-                //TODO: fallback if title missing
-                col = col.push(widget::text::title4(&self.mpris_meta.title));
-                for artist in self.mpris_meta.artists.iter() {
-                    col = col.push(widget::text::body(artist));
-                }
-                col = col.push(widget::vertical_space(space_s));
-                if !self.mpris_meta.album.is_empty() {
-                    col = col.push(widget::text::body(fl!(
-                        "album",
-                        album = self.mpris_meta.album.as_str()
-                    )));
-                }
-                if let Some(year) = &self.mpris_meta.album_year_opt {
-                    col = col.push(widget::text::body(format!("{}", year)));
-                }
-                col = col.push(widget::vertical_space(Length::Fill));
+            }
+            col = col.push(widget::vertical_space(space_s));
+            //TODO: fallback if title missing
+            col = col.push(widget::text::title4(&self.mpris_meta.title));
+            for artist in self.mpris_meta.artists.iter() {
+                col = col.push(widget::text::body(artist));
+            }
+            col = col.push(widget::vertical_space(space_s));
+            if !self.mpris_meta.album.is_empty() {
+                col = col.push(widget::text::body(fl!(
+                    "album",
+                    album = self.mpris_meta.album.as_str()
+                )));
+            }
+            if let Some(year) = &self.mpris_meta.album_year_opt {
+                col = col.push(widget::text::body(format!("{}", year)));
+            }
+            col = col.push(widget::vertical_space(Length::Fill));
 
-                // Space to keep from going under control overlay
-                let mut control_height = space_xxs + 32 + space_xxs;
-                if self.core.is_condensed() {
-                    control_height += space_xxs + 32;
-                }
+            // Space to keep from going under control overlay
+            let mut control_height = space_xxs + 32 + space_xxs;
+            if self.core.is_condensed() {
+                control_height += space_xxs + 32;
+            }
 
-                // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
-                video_player = widget::row::with_children(vec![
-                    widget::horizontal_space(Length::Fill).into(),
-                    widget::container(
-                        col.push(widget::container(video_player).height(control_height)),
-                    )
+            // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
+            video_player = widget::row::with_children(vec![
+                widget::horizontal_space(Length::Fill).into(),
+                widget::container(col.push(widget::container(video_player).height(control_height)))
                     .width(320)
                     .into(),
-                    widget::horizontal_space(Length::Fill).into(),
-                ])
-                .into();
-            }
+                widget::horizontal_space(Length::Fill).into(),
+            ])
+            .into();
         }
 
         let mouse_area = widget::mouse_area(video_player)
@@ -1522,7 +1522,12 @@ impl Application for App {
             .width(Length::Fill)
             .height(Length::Fill)
             .style(theme::Container::Custom(Box::new(move |_theme| {
-                widget::container::Appearance::default().with_background(background_color)
+                let mut appearance =
+                    widget::container::Appearance::default().with_background(background_color);
+                if let Some(text_color) = text_color_opt {
+                    appearance.text_color = Some(text_color);
+                }
+                appearance
             })))
             .into()
     }
