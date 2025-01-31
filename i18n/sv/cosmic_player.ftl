@@ -1,6 +1,7 @@
 audio = Ljud
 no-video-or-audio-file-open = Ingen video eller ljudfil är öppen
 open-file = Öppna fil
+open-folder = Öppna mapp
 subtitles = Undertexter
 
 # Kontextsidor
@@ -22,4 +23,6 @@ file = Fil
 open-media = Öppna media...
 open-recent-media = Öppna senaste media
 close-file = Stäng fil
+open-media-folder = Öppna mediamappen...
+open-recent-media-folder = Öppna mappen för senaste media
 quit = Avsluta
