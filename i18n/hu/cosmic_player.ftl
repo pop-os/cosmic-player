@@ -1,8 +1,11 @@
+album = Album: {$album}
 audio = Hang
 no-video-or-audio-file-open = Nincs videó- vagy hangfájl megnyitva
 open-file = Fájl megnyitása
 open-folder = Mappa megnyitása
 subtitles = Feliratok
+unknown-author = Ismeretlen szerző
+untitled = Nincs cím
 
 # Context Pages
 
@@ -20,7 +23,7 @@ light = Világos
 
 ## File
 file = Fájl
-open-media = Média megnyitása...
+open-media = Médiafájl megnyitása...
 open-recent-media = Legutóbbi média megnyitása
 close-file = Fájl bezárása
 open-media-folder = Média mappa megnyitása...
