@@ -1,8 +1,11 @@
+album = Album: {$album}
 audio = Ljud
 no-video-or-audio-file-open = Ingen video eller ljudfil är öppen
 open-file = Öppna fil
 open-folder = Öppna mapp
 subtitles = Undertexter
+unknown-author = Okänd upphovsman
+untitled = Namnlös
 
 # Kontextsidor
 
@@ -25,4 +28,5 @@ open-recent-media = Öppna senaste media
 close-file = Stäng fil
 open-media-folder = Öppna mediamappen...
 open-recent-media-folder = Öppna mappen för senaste media
+close-media-folder = Stäng mediamappen
 quit = Avsluta
