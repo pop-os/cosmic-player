@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{message, Command, Core, Settings},
+    app::{command, message, Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor, font,
     iced::{
@@ -114,7 +114,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(arg) => match url::Url::parse(&arg) {
             Ok(url) => Some(url),
             Err(_) => match fs::canonicalize(&arg) {
-                Ok(path) => match url::Url::from_file_path(&path) {
+                Ok(path) => match url::Url::from_file_path(&path).or_else(|_| url::Url::from_directory_path(&path)) {
                     Ok(url) => Some(url),
                     Err(()) => {
                         log::warn!("failed to parse path {:?}", path);
@@ -809,7 +809,15 @@ impl Application for App {
             .icon(widget::icon::from_name("folder-open-symbolic").size(16))
             .text(fl!("open-folder"));
 
-        let command = app.load();
+        let maybe_path = app
+            .flags
+            .url_opt
+            .as_ref()
+            .and_then(|url| url.to_file_path().ok());
+        let command = match maybe_path {
+            Some(path) if path.is_dir() => command::message::app(Message::FolderLoad(path)),
+            _ => app.load(),
+        };
         (app, command)
     }
 
