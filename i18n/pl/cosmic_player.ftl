@@ -1,8 +1,11 @@
+album = Album: {$album}
 audio = Audio
 no-video-or-audio-file-open = Brak otwartego pliku audio lub wideo
 open-file = Otwórz plik
 open-folder = Otwórz katalog
 subtitles = Napisy
+unknown-author = Nieznany Autor
+untitled = Bez nazwy
 
 # Context Pages
 
