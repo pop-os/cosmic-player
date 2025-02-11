@@ -37,6 +37,7 @@ use crate::{
     project::ProjectNode,
 };
 
+mod argparse;
 mod config;
 mod key_bind;
 mod localize;
@@ -110,25 +111,8 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-    let url_opt = match std::env::args().nth(1) {
-        Some(arg) => match url::Url::parse(&arg) {
-            Ok(url) => Some(url),
-            Err(_) => match fs::canonicalize(&arg) {
-                Ok(path) => match url::Url::from_file_path(&path).or_else(|_| url::Url::from_directory_path(&path)) {
-                    Ok(url) => Some(url),
-                    Err(()) => {
-                        log::warn!("failed to parse path {:?}", path);
-                        None
-                    }
-                },
-                Err(err) => {
-                    log::warn!("failed to parse argument {:?}: {}", arg, err);
-                    None
-                }
-            },
-        },
-        None => None,
-    };
+    let args = argparse::Arguments::from_args().unwrap_or_default();
+    let url_opt = args.urls.into_iter().next();
 
     let flags = Flags {
         config_handler,

@@ -12,6 +12,7 @@ serde = { version = "1", features = ["serde_derive"] }
 tempfile = "3"
 tokio = "1"
 url = "2"
+pico-args = "0.5"
 # Internationalization
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
