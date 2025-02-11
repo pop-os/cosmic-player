@@ -8,8 +8,10 @@ use url::Url;
 
 #[derive(Debug, Default)]
 pub struct Arguments {
-    /// URLs to play with associated metadata
-    pub urls: Vec<Url>,
+    /// Files or directory URLs to play
+    pub urls: Option<Vec<Url>>,
+    /// Single URL only
+    pub url_opt: Option<Url>,
 }
 
 impl Arguments {
@@ -31,7 +33,17 @@ impl Arguments {
             warn!("Unused argument: {arg:?}");
         }
 
-        Ok(Arguments { urls })
+        if urls.len() > 1 {
+            Ok(Arguments {
+                urls: Some(urls),
+                ..Default::default()
+            })
+        } else {
+            Ok(Arguments {
+                url_opt: urls.into_iter().next(),
+                ..Default::default()
+            })
+        }
     }
 }
 
