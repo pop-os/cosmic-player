@@ -1083,6 +1083,7 @@ dependencies = [
  "libcosmic",
  "log",
  "mpris-server",
+ "pico-args",
  "rust-embed",
  "serde",
  "smol_str",
