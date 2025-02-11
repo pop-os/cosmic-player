@@ -111,8 +111,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-    let args = argparse::Arguments::from_args().unwrap_or_default();
-    let url_opt = args.urls.into_iter().next();
+    let argparse::Arguments { urls, url_opt } = argparse::Arguments::from_args().unwrap_or_default();
 
     let flags = Flags {
         config_handler,
@@ -120,6 +119,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         config_state_handler,
         config_state,
         url_opt,
+        urls
     };
     cosmic::app::run::<App>(settings, flags)?;
 
@@ -168,6 +168,7 @@ pub struct Flags {
     config_state_handler: Option<cosmic_config::Config>,
     config_state: ConfigState,
     url_opt: Option<url::Url>,
+    urls: Option<Vec<url::Url>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -219,6 +220,7 @@ pub enum Message {
     FolderLoad(PathBuf),
     FolderOpen,
     FolderOpenRecent(usize),
+    MultipleLoad(Vec<url::Url>),
     Fullscreen,
     Key(Modifiers, Key),
     AudioCode(usize),
@@ -543,6 +545,30 @@ impl App {
         self.open_folder(path, position + 1, 1);
     }
 
+    fn add_file_to_project(&mut self, path: impl AsRef<Path>) {
+        let path = path.as_ref();
+        let node = match ProjectNode::new(path) {
+            Ok(node) if matches!(node, ProjectNode::File { .. }) => node,
+            Err(e) => {
+                log::error!("failed to open project {} {}", path.display(), e);
+                return;
+            }
+            _ => {
+                log::error!(
+                    "failed to open project: expected {} to be a file path",
+                    path.display()
+                );
+                return;
+            }
+        };
+
+        let mut entity = self.nav_model.insert().text(node.name().to_owned());
+        if let Some(icon) = node.icon(16) {
+            entity = entity.icon(icon);
+        }
+        entity.data(node);
+    }
+
     fn save_config_state(&mut self) {
         if let Some(ref config_state_handler) = self.flags.config_state_handler {
             if let Err(err) = self.flags.config_state.write_entry(config_state_handler) {
@@ -793,13 +819,15 @@ impl Application for App {
             .icon(widget::icon::from_name("folder-open-symbolic").size(16))
             .text(fl!("open-folder"));
 
+        // TODO: This is kind of ugly and may be handled better in Arguments
         let maybe_path = app
             .flags
             .url_opt
             .as_ref()
             .and_then(|url| url.to_file_path().ok());
-        let command = match maybe_path {
-            Some(path) if path.is_dir() => command::message::app(Message::FolderLoad(path)),
+        let command = match (app.flags.urls.take(), maybe_path) {
+            (Some(urls), _) => command::message::app(Message::MultipleLoad(urls)),
+            (None, Some(path)) if path.is_dir() => command::message::app(Message::FolderLoad(path)),
             _ => app.load(),
         };
         (app, command)
@@ -1009,6 +1037,30 @@ impl Application for App {
                 if let Some(path) = self.flags.config_state.recent_projects.get(index) {
                     return self.update(Message::FolderLoad(path.clone()));
                 }
+            }
+            Message::MultipleLoad(urls) => {
+                log::trace!("Loading multiple URLs: {urls:?}");
+                let paths: Vec<_> = urls
+                    .into_iter()
+                    .flat_map(|url| url.to_file_path())
+                    .collect();
+
+                for path in paths {
+                    if path.is_file() {
+                        log::trace!("Appending file to playlist: {}", path.display());
+                        self.add_file_to_project(path);
+                    } else if path.is_dir() {
+                        log::trace!("Appending directory to playlist: {}", path.display());
+                        self.open_project(path);
+                    } else {
+                        log::warn!(
+                            "Tried to add unsupported path to playlist: {}",
+                            path.display()
+                        );
+                    }
+                }
+
+                self.core.nav_bar_set_toggled(true);
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
