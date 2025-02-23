@@ -1,5 +1,11 @@
+album = Albam: {$album}
 audio = Fuaime
+no-video-or-audio-file-open = Níl físeán ná comhad fuaime oscailte
+open-file = Oscail comhad
+open-folder = Oscail fillteán
 subtitles = Fotheidil
+unknown-author = Údar anaithnid
+untitled = Gan teideal
 
 # Context Pages
 
@@ -7,9 +13,9 @@ subtitles = Fotheidil
 settings = Socruithe
 
 ### Appearance
-appearance = Dealramh
+appearance = Cuma
 theme = Téama
-match-desktop = Meaitseáil deasc
+match-desktop = Meaitseáil leis an deasc
 dark = Dorcha
 light = Solas
 
@@ -20,4 +26,7 @@ file = Comhad
 open-media = Meáin oscailte...
 open-recent-media = Oscail meáin le déanaí
 close-file = Dún an comhad
+open-media-folder = Oscail fillteán meán...
+open-recent-media-folder = Oscail fillteán meán le déanaí
+close-media-folder = Dún an fillteán meán
 quit = Scoir
