@@ -1,4 +1,6 @@
+album = アルバム名：{$album}
 audio = 音声
+no-video-or-audio-file-open = ビデオおよびオーディオファイルが開いていません
 subtitles = 字幕
 
 # Context pages
