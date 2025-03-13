@@ -2,7 +2,7 @@
 [Desktop Entry]
 Name=COSMIC Media Player
 Name[hu]=COSMIC Médialejátszó
-Exec=cosmic-player %u
+Exec=cosmic-player %U
 Terminal=false
 Type=Application
 StartupNotify=true
