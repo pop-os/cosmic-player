@@ -42,6 +42,9 @@ optional = true
 version = "0.2.1"
 features = ["serde"]
 
+[target.'cfg(unix)'.dependencies]
+fork = "0.2"
+
 [features]
 default = ["mpris-server", "xdg-portal", "wgpu"]
 xdg-portal = ["libcosmic/xdg-portal"]
