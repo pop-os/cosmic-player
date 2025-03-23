@@ -103,7 +103,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-
     #[cfg(all(unix, not(target_os = "redox")))]
     match fork::daemon(true, true) {
         Ok(fork::Fork::Child) => (),
