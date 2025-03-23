@@ -52,6 +52,23 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
+use lexopt::{Parser, Arg};
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn print_help() {
+    println!(
+        r#"
+COSMIC Player
+A media player designed for the COSMIC desktop environment.
+
+Project home page: https://github.com/pop-os/cosmic-player
+
+Options:
+  --help     Show this message
+  --version  Show the version of cosmic-player"#
+    );
+}
+
 fn language_name(code: &str) -> Option<String> {
     let code_c = CString::new(code).ok()?;
     let name_c = unsafe {
@@ -69,6 +86,24 @@ fn language_name(code: &str) -> Option<String> {
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut parser = Parser::from_env();
+
+    // Parse the arguments
+    while let Some(arg) = parser.next()? {
+        match arg {
+            Arg::Long("help") => {
+                print_help();
+                return Ok(());
+            }
+            Arg::Long("version") => {
+                println!("cosmic-player {}", APP_VERSION);
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
+
     #[cfg(all(unix, not(target_os = "redox")))]
     match fork::daemon(true, true) {
         Ok(fork::Fork::Child) => (),

@@ -13,6 +13,8 @@ tempfile = "3"
 tokio = "1"
 url = "2"
 pico-args = "0.5"
+# CLI arguments
+lexopt = "0.3.0"
 # Internationalization
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
