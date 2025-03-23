@@ -1,8 +1,11 @@
+album = 专辑: {$album}
 audio = 音频
-no-video-or-audio-file-open = 没有打开视频或音频文件
+no-video-or-audio-file-open = 未打开视频或音频文件
 open-file = 打开文件
 open-folder = 打开文件夹
 subtitles = 字幕
+unknown-author = 未知作者
+untitled = 无标题
 
 # Context Pages
 
