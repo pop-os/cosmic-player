@@ -161,7 +161,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn print_help(version: &str, git_rev: &str) {
     println!(
-        r#"cosmic-greeter {version} (git commit {git_rev})
+        r#"cosmic-player {version} (git commit {git_rev})
 System76 <info@system76.com>
 	    
 Designed for the COSMIC™ desktop environment, cosmic-player is a libcosmic-based media player.
@@ -170,7 +170,7 @@ Project home page: https://github.com/pop-os/cosmic-player
 	    
 Options:
   -h, --help     Show this message
-  -v, --version  Show the version of cosmic-greeter"#
+  -v, --version  Show the version of cosmic-player"#
     );
 }
 
