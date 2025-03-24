@@ -3,6 +3,9 @@ name = "cosmic-player"
 version = "0.1.0"
 edition = "2021"
 
+[build-dependencies]
+vergen = { version = "8", features = ["git", "gitcl"] }
+
 [dependencies]
 dirs = "5"
 gstreamer-tag = "0.23"

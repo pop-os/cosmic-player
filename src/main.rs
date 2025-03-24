@@ -53,12 +53,10 @@ const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
 use lexopt::{Parser, Arg};
-const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn print_help() {
     println!(
-        r#"
-COSMIC Player
+        r#"COSMIC Player
 A media player designed for the COSMIC desktop environment.
 
 Project home page: https://github.com/pop-os/cosmic-player
@@ -91,12 +89,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse the arguments
     while let Some(arg) = parser.next()? {
         match arg {
-            Arg::Long("help") => {
+            Arg::Short('h') | Arg::Long("help") => {
                 print_help();
                 return Ok(());
             }
-            Arg::Long("version") => {
-                println!("cosmic-player {}", APP_VERSION);
+            Arg::Short('v') | Arg::Long("version") => {
+                println!("cosmic-player {} (git commit {})",
+                    env!("CARGO_PKG_VERSION"),
+                    env!("VERGEN_GIT_SHA")
+                );
                 return Ok(());
             }
             _ => {}
