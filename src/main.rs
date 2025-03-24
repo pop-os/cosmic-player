@@ -52,20 +52,7 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
-use lexopt::{Parser, Arg};
-
-fn print_help() {
-    println!(
-        r#"COSMIC Player
-A media player designed for the COSMIC desktop environment.
-
-Project home page: https://github.com/pop-os/cosmic-player
-
-Options:
-  --help     Show this message
-  --version  Show the version of cosmic-player"#
-    );
-}
+use lexopt::{Arg, Parser};
 
 fn language_name(code: &str) -> Option<String> {
     let code_c = CString::new(code).ok()?;
@@ -90,11 +77,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while let Some(arg) = parser.next()? {
         match arg {
             Arg::Short('h') | Arg::Long("help") => {
-                print_help();
-                return Ok(());
+                print_help(env!("CARGO_PKG_VERSION"), env!("VERGEN_GIT_SHA"));
+		return Ok(());
             }
             Arg::Short('v') | Arg::Long("version") => {
-                println!("cosmic-player {} (git commit {})",
+                println!(
+		    "cosmic-player {} (git commit {})",
                     env!("CARGO_PKG_VERSION"),
                     env!("VERGEN_GIT_SHA")
                 );
@@ -169,6 +157,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     cosmic::app::run::<App>(settings, flags)?;
 
     Ok(())
+}
+
+fn print_help(version: &str, git_rev: &str) {
+    println!(
+        r#"cosmic-greeter {version} (git commit {git_rev})
+System76 <info@system76.com>
+	    
+Designed for the COSMIC™ desktop environment, cosmic-player is a libcosmic-based media player.
+	    
+Project home page: https://github.com/pop-os/cosmic-player
+	    
+Options:
+  -h, --help     Show this message
+  -v, --version  Show the version of cosmic-greeter"#
+    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
