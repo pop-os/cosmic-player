@@ -52,7 +52,9 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
-use lexopt::{Arg, Parser};
+use clap_lex::RawArgs;
+
+use std::error::Error;
 
 fn language_name(code: &str) -> Option<String> {
     let code_c = CString::new(code).ok()?;
@@ -70,19 +72,20 @@ fn language_name(code: &str) -> Option<String> {
 
 /// Runs application with these settings
 #[rustfmt::skip]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut parser = Parser::from_env();
+fn main() -> Result<(), Box<dyn Error>> {
+    let raw_args = RawArgs::from_args();
+    let mut cursor = raw_args.cursor();
 
     // Parse the arguments
-    while let Some(arg) = parser.next()? {
-        match arg {
-            Arg::Short('h') | Arg::Long("help") => {
+    while let Some(arg) = raw_args.next_os(&mut cursor) {
+        match arg.to_str() {
+            Some("--help") | Some("-h") => {
                 print_help(env!("CARGO_PKG_VERSION"), env!("VERGEN_GIT_SHA"));
 		return Ok(());
             }
-            Arg::Short('v') | Arg::Long("version") => {
+            Some("--version") | Some("-v") => {
                 println!(
-		    "cosmic-player {} (git commit {})",
+                    "cosmic-player {} (git commit {})",
                     env!("CARGO_PKG_VERSION"),
                     env!("VERGEN_GIT_SHA")
                 );
