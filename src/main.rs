@@ -52,6 +52,8 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
+use std::error::Error;
+
 fn language_name(code: &str) -> Option<String> {
     let code_c = CString::new(code).ok()?;
     let name_c = unsafe {
@@ -68,7 +70,7 @@ fn language_name(code: &str) -> Option<String> {
 
 /// Runs application with these settings
 #[rustfmt::skip]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(all(unix, not(target_os = "redox")))]
     match fork::daemon(true, true) {
         Ok(fork::Fork::Child) => (),
@@ -78,17 +80,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             process::exit(1);
         }
     }
-	
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     localize::localize();
+
+    let args = argparse::parse();
 
     let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
         Ok(config_handler) => {
             let config = match Config::get_entry(&config_handler) {
                 Ok(ok) => ok,
                 Err((errs, config)) => {
-                    log::info!("errors loading config: {:?}", errs);
+                    log::error!("errors loading config: {:?}", errs);
                     config
                 }
             };
@@ -121,15 +125,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-    let argparse::Arguments { urls, url_opt } = argparse::Arguments::from_args().unwrap_or_default();
-
     let flags = Flags {
         config_handler,
         config,
         config_state_handler,
         config_state,
-        url_opt,
-        urls
+        url_opt: args.url_opt,
+        urls: args.urls,
     };
     cosmic::app::run::<App>(settings, flags)?;
 

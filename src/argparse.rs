@@ -3,8 +3,56 @@
 
 use std::{fs, io};
 
+use clap_lex::RawArgs;
 use log::warn;
 use url::Url;
+
+pub fn parse() -> Arguments {
+    let raw_args = RawArgs::from_args();
+    let mut cursor = raw_args.cursor();
+    let mut arguments = Arguments::default();
+    let mut urls = Vec::new();
+
+    // Parse the arguments
+    while let Some(arg) = raw_args.next(&mut cursor) {
+        if let Some(mut shorts) = arg.to_short() {
+            while let Some(short) = shorts.next_flag() {
+                match short {
+                    Ok('h') => print_help(),
+                    Ok('V') => print_version(),
+                    Ok(c) => warn!("unexpected flag: -{c}"),
+                    Err(os_str) => warn!("unexpected flag: -{}", os_str.to_string_lossy()),
+                }
+            }
+        } else if let Some((long, _opt_value)) = arg.to_long() {
+            match long {
+                Ok("help") => print_help(),
+                Ok("version") => print_version(),
+                _ => warn!("unexpected flag: {}", arg.display()),
+            }
+        } else {
+            // Freestanding arguments are treated as URLs
+            match arg.to_value().ok().map(Source::try_from) {
+                Some(Ok(source)) => urls.push(source.0),
+                Some(Err(why)) => {
+                    warn!("{}: not a valid URL: {}", arg.display(), why)
+                }
+                None => {
+                    warn!("{}: not a valid string", arg.display())
+                }
+            }
+        }
+    }
+
+    if urls.len() > 1 {
+        arguments.urls = Some(urls);
+    } else {
+        urls.truncate(1);
+        arguments.url_opt = urls.pop();
+    }
+
+    arguments
+}
 
 #[derive(Debug, Default)]
 pub struct Arguments {
@@ -12,39 +60,6 @@ pub struct Arguments {
     pub urls: Option<Vec<Url>>,
     /// Single URL only
     pub url_opt: Option<Url>,
-}
-
-impl Arguments {
-    pub fn from_args() -> Result<Self, pico_args::Error> {
-        let mut parser = pico_args::Arguments::from_env();
-
-        // Freestanding arguments are treated as URLs
-        let urls: Vec<Url> = std::iter::from_fn(|| {
-            parser
-                .opt_free_from_fn(|arg| Source::try_from(arg))
-                .ok()
-                .flatten()
-        })
-        .map(|source| source.0)
-        .collect();
-
-        let remainder = parser.finish();
-        for arg in remainder {
-            warn!("Unused argument: {arg:?}");
-        }
-
-        if urls.len() > 1 {
-            Ok(Arguments {
-                urls: Some(urls),
-                ..Default::default()
-            })
-        } else {
-            Ok(Arguments {
-                url_opt: urls.into_iter().next(),
-                ..Default::default()
-            })
-        }
-    }
 }
 
 // #[derive(Debug)]
@@ -80,4 +95,37 @@ impl TryFrom<&str> for Source {
             },
         }
     }
+}
+
+#[cold]
+pub fn print_help() -> ! {
+    let version = env!("CARGO_PKG_VERSION");
+    let git_rev = env!("VERGEN_GIT_SHA");
+
+    println!(
+        r#"cosmic-player {version} (git commit {git_rev})
+System76 <info@system76.com>
+
+Designed for the COSMIC™ desktop environment, cosmic-player is a
+libcosmic-based multimedia player for music and videos.
+
+Project home page: https://github.com/pop-os/cosmic-player
+
+Options:
+  -h, --help     Show this message
+  -V, --version  Show the version of cosmic-player"#
+    );
+
+    std::process::exit(0);
+}
+
+#[cold]
+pub fn print_version() -> ! {
+    println!(
+        "cosmic-player {} (git commit {})",
+        env!("CARGO_PKG_VERSION"),
+        env!("VERGEN_GIT_SHA")
+    );
+
+    std::process::exit(0);
 }
