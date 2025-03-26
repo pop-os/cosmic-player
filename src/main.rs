@@ -52,8 +52,6 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
-use clap_lex::RawArgs;
-
 use std::error::Error;
 
 fn language_name(code: &str) -> Option<String> {
@@ -73,28 +71,6 @@ fn language_name(code: &str) -> Option<String> {
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn Error>> {
-    let raw_args = RawArgs::from_args();
-    let mut cursor = raw_args.cursor();
-
-    // Parse the arguments
-    while let Some(arg) = raw_args.next_os(&mut cursor) {
-        match arg.to_str() {
-            Some("--help") | Some("-h") => {
-                print_help(env!("CARGO_PKG_VERSION"), env!("VERGEN_GIT_SHA"));
-		return Ok(());
-            }
-            Some("--version") | Some("-v") => {
-                println!(
-                    "cosmic-player {} (git commit {})",
-                    env!("CARGO_PKG_VERSION"),
-                    env!("VERGEN_GIT_SHA")
-                );
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
-
     #[cfg(all(unix, not(target_os = "redox")))]
     match fork::daemon(true, true) {
         Ok(fork::Fork::Child) => (),
@@ -104,17 +80,19 @@ fn main() -> Result<(), Box<dyn Error>> {
             process::exit(1);
         }
     }
-	
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
     localize::localize();
+
+    let args = argparse::parse();
 
     let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
         Ok(config_handler) => {
             let config = match Config::get_entry(&config_handler) {
                 Ok(ok) => ok,
                 Err((errs, config)) => {
-                    log::info!("errors loading config: {:?}", errs);
+                    log::error!("errors loading config: {:?}", errs);
                     config
                 }
             };
@@ -147,34 +125,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-    let argparse::Arguments { urls, url_opt } = argparse::Arguments::from_args().unwrap_or_default();
-
     let flags = Flags {
         config_handler,
         config,
         config_state_handler,
         config_state,
-        url_opt,
-        urls
+        url_opt: args.url_opt,
+        urls: args.urls,
     };
     cosmic::app::run::<App>(settings, flags)?;
 
     Ok(())
-}
-
-fn print_help(version: &str, git_rev: &str) {
-    println!(
-        r#"cosmic-player {version} (git commit {git_rev})
-System76 <info@system76.com>
-	    
-Designed for the COSMIC™ desktop environment, cosmic-player is a libcosmic-based media player.
-	    
-Project home page: https://github.com/pop-os/cosmic-player
-	    
-Options:
-  -h, --help     Show this message
-  -v, --version  Show the version of cosmic-player"#
-    );
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

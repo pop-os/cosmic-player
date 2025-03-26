@@ -20,7 +20,10 @@ clap_lex = "0.7"
 # Internationalization
 icu_collator = "1.5"
 icu_provider = { version = "1.5", features = ["sync"] }
-i18n-embed = { version = "0.14", features = ["fluent-system", "desktop-requester"] }
+i18n-embed = { version = "0.14", features = [
+    "fluent-system",
+    "desktop-requester",
+] }
 i18n-embed-fl = "0.7"
 rust-embed = "8"
 # Logging
@@ -65,4 +68,3 @@ debug = true
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-
