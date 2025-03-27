@@ -596,9 +596,11 @@ impl App {
                 .as_ref()
                 .map_or(false, |video| video.has_video())
         {
+            self.core.window.show_headerbar = true && !self.fullscreen;
             self.controls = true;
             self.controls_time = Instant::now();
         } else if self.controls && self.controls_time.elapsed() > CONTROLS_TIMEOUT {
+            self.core.window.show_headerbar = false;
             self.controls = false;
         }
         self.update_mpris_state();
