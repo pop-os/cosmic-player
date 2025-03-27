@@ -14,6 +14,7 @@ pub fn parse() -> Arguments {
     let mut urls = Vec::new();
 
     // Parse the arguments
+    raw_args.next(&mut cursor);
     while let Some(arg) = raw_args.next(&mut cursor) {
         if let Some(mut shorts) = arg.to_short() {
             while let Some(short) = shorts.next_flag() {
