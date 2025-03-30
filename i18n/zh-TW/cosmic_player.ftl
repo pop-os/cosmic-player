@@ -13,7 +13,7 @@ untitled = 無標題
 settings = 設定
 
 ### Appearance
-外觀 = 外觀
+appearance = 外觀
 theme = 主題
 match-desktop = 與桌面保持一致
 dark = 深色主題
