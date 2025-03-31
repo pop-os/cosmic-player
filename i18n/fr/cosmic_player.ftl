@@ -1,6 +1,6 @@
 album = Album: {$album}
 audio = Audio
-no-video-or-audio-file-open = Aucun media sélectionné 
+no-video-or-audio-file-open = Aucun média sélectionné 
 open-file = Ouvrir fichier
 open-folder = Ouvrir dossier
 subtitles = Sous-titres
@@ -23,10 +23,10 @@ light = Clair
 
 ## File
 file = Fichier
-open-media = Ouvrir media...
+open-media = Ouvrir média ...
 open-recent-media = Ouvrir média récent
 close-file = Fermer média
-open-media-folder = Open media folder...
+open-media-folder = Ouvrir le dossier du média ...
 open-recent-media-folder = Ouvrir le dossier du média récent
 close-media-folder = Fermer le dossier du média
 quit = Quitter
