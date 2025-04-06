@@ -5,7 +5,7 @@ open-file = Apri file
 open-folder = Apri cartella
 subtitles = Sottotitoli
 unknown-author = Autore sconosciuto
-untitled = Senza nome
+untitled = Senza titolo
 
 # Context Pages
 
@@ -15,7 +15,7 @@ settings = Impostazioni
 ### Appearance
 appearance = Aspetto
 theme = Tema
-match-desktop = Abbina alla scrivania
+match-desktop = Sistema
 dark = Scuro
 light = Chiaro
 
@@ -25,8 +25,8 @@ light = Chiaro
 file = File
 open-media = Apri media...
 open-recent-media = Apri media recente
-close-file = Chiudere file
+close-file = Chiudi file
 open-media-folder = Apri cartella multimediale...
 open-recent-media-folder = Apri cartella multimediale recente
-close-media-folder = Chiudere cartella multimediale
-quit = Esci
+close-media-folder = Chiudi cartella multimediale
+quit = Chiudi
