@@ -13,8 +13,8 @@ image = "0.24.9"
 lazy_static = "1"
 serde = { version = "1", features = ["serde_derive"] }
 tempfile = "3"
-tokio = "1"
-url = "2"
+tokio = { version = "1", features = ["sync"] }
+url = { version = "2", features = ["serde"] }
 # CLI arguments
 clap_lex = "0.7"
 # Internationalization
