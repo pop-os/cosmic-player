@@ -15,7 +15,7 @@ settings = Beállítások
 ### Appearance
 appearance = Megjelenés
 theme = Téma
-match-desktop = Asztallal egyező
+match-desktop = Rendszertéma
 dark = Sötét
 light = Világos
 
@@ -24,7 +24,7 @@ light = Világos
 ## File
 file = Fájl
 open-media = Médiafájl megnyitása...
-open-recent-media = Legutóbbi média megnyitása
+open-recent-media = Legutóbbi médiafájl megnyitása
 close-file = Fájl bezárása
 open-media-folder = Médiamappa megnyitása...
 open-recent-media-folder = Legutóbbi médiamappa megnyitása
