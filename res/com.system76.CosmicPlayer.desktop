@@ -1,6 +1,7 @@
 #TODO: more build-out, desktop actions, translations?
 [Desktop Entry]
 Name=COSMIC Media Player
+Name[zh_CN]=COSMIC 媒体播放器
 Name[hu]=COSMIC Médialejátszó
 Name[pt_BR]=Reprodutor de Mídia
 Name[pt]=Reprodutor de Mídia
