@@ -13,12 +13,12 @@
   <name xml:lang="pt_BR">Reprodutor de Mídia</name>
   <name xml:lang="pt">Reprodutor de Mídia</name>
   <summary>Media player for the COSMIC desktop</summary>
-  <summary xml:lang="hu">Médialejátszó a COSMIC asztalhoz</summary>
+  <summary xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</summary>
   <summary xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</summary>
   <summary xml:lang="pt">Reprodutor de mídia do desktop COSMIC</summary>
   <description>
     <p>Media player for the COSMIC desktop</p>
-    <p xml:lang="hu">Médialejátszó a COSMIC asztalhoz</p>
+    <p xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</p>
     <p xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</p>
     <p xml:lang="pt">Reprodutor de mídia do desktop COSMIC</p>
   </description>
