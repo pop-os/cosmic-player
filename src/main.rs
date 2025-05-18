@@ -9,6 +9,7 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::Event as MouseEvent,
+        mouse::ScrollDelta,
         subscription::Subscription,
         window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
@@ -242,6 +243,7 @@ pub enum Message {
     Pause,
     Play,
     PlayPause,
+    Scrolled(ScrollDelta),
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
@@ -1143,6 +1145,37 @@ impl Application for App {
                     self.update_controls(true);
                 }
             }
+            Message::Scrolled(delta) => {
+                if let Some(video) = &mut self.video_opt {
+                    let mut volume = video.volume();
+                    match delta {
+                        ScrollDelta::Pixels { x, y } => {
+                            if y < 0.0 {
+                                // scrolling down, lower volume
+                                volume -= 0.0125;
+                            } else if y > 0.0 {
+                                // scrolling up, increase volume
+                                volume += 0.0125;
+                            }
+
+                            if x > 0.0 {
+                                // scrolling left, lower volume
+                                volume -= 0.0125;
+                            } else if x < 0.0 {
+                                // scrolling right, increase volume
+                                volume += 0.0125;
+                            }
+                        }
+                        #[allow(dropping_copy_types)]
+                        _ => drop(delta), // placeholder, does nothing
+                    }
+
+                    if volume >= 0.0 && volume <= 1.0 {
+                        video.set_volume(volume);
+                        self.update_controls(true);
+                    }
+                }
+            }
             Message::Seek(secs) => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
@@ -1610,6 +1643,7 @@ impl Application for App {
                     Some(Message::Key(modifiers, key))
                 }
                 Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
+                Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Scrolled(delta)),
                 _ => None,
             }),
             cosmic_config::config_subscription(
