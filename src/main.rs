@@ -274,6 +274,7 @@ pub struct App {
     position: f64,
     duration: f64,
     dragging: bool,
+    paused_on_scrub: bool,
     audio_codes: Vec<String>,
     audio_tags: Vec<gst::TagList>,
     current_audio: i32,
@@ -816,6 +817,7 @@ impl Application for App {
             position: 0.0,
             duration: 0.0,
             dragging: false,
+            paused_on_scrub: false,
             audio_codes: Vec::new(),
             audio_tags: Vec::new(),
             current_audio: -1,
@@ -1183,6 +1185,7 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     self.dragging = true;
                     self.position = secs;
+                    self.paused_on_scrub = video.paused();
                     video.set_paused(true);
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
@@ -1205,7 +1208,7 @@ impl Application for App {
                     self.dragging = false;
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
-                    video.set_paused(false);
+                    video.set_paused(self.paused_on_scrub);
                     self.update_controls(true);
                 }
             }
