@@ -8,8 +8,7 @@ use cosmic::{
     iced::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
-        mouse::Event as MouseEvent,
-        mouse::ScrollDelta,
+        mouse::{Event as MouseEvent, ScrollDelta},
         subscription::Subscription,
         window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
@@ -1146,6 +1145,7 @@ impl Application for App {
                 }
             }
             Message::Scrolled(delta) => {
+                let nav_bar_toggled = self.core.nav_bar_active();
                 if let Some(video) = &mut self.video_opt {
                     let mut volume = video.volume();
                     match delta {
@@ -1170,7 +1170,7 @@ impl Application for App {
                         _ => drop(delta), // placeholder, does nothing
                     }
 
-                    if volume >= 0.0 && volume <= 1.0 {
+                    if (volume >= 0.0 && volume <= 1.0) && !nav_bar_toggled {
                         video.set_volume(volume);
                         self.update_controls(true);
                     }
