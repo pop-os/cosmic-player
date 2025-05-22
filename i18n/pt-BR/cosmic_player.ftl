@@ -15,9 +15,9 @@ settings = Configurações
 ### Appearance
 appearance = Aparência
 theme = Tema
-match-desktop = Acompanhar o tema da área de trabalho
-dark = Escuro
-light = Claro
+match-desktop = Estilo do sistema
+dark = Estilo escuro
+light = Estilo claro
 
 # Menu
 
