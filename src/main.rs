@@ -1168,8 +1168,23 @@ impl Application for App {
                                 volume += 0.0125;
                             }
                         }
-                        #[allow(dropping_copy_types)]
-                        _ => drop(delta), // placeholder, does nothing
+                        ScrollDelta::Lines { x, y } => {
+                            if y < 0.0 {
+                                // scrolling down, lower volume
+                                volume -= 0.0125;
+                            } else if y > 0.0 {
+                                // scrolling up, increase volume
+                                volume += 0.0125;
+                            }
+
+                            if x > 0.0 {
+                                // scrolling left, lower volume
+                                volume -= 0.0125;
+                            } else if x < 0.0 {
+                                // scrolling right, increase volume
+                                volume += 0.0125;
+                            }
+                        }
                     }
 
                     if (volume >= 0.0 && volume <= 1.0) && !nav_bar_toggled {
