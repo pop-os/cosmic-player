@@ -61,6 +61,9 @@ wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 inherits = "release"
 debug = true
 
+[profile.release]
+strip = true
+
 # [patch.'https://github.com/jackpot51/iced_video_player']
 # iced_video_player = { path = "../../iced_video_player" }
 
