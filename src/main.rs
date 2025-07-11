@@ -45,6 +45,7 @@ mod menu;
 #[cfg(feature = "mpris-server")]
 mod mpris;
 mod project;
+mod thumbnail;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
@@ -71,6 +72,25 @@ fn language_name(code: &str) -> Option<String> {
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn Error>> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
+
+    let args = argparse::parse();
+
+    if let Some(output) = args.thumbnail_opt {
+        let Some(input) = args.url_opt else {
+            log::error!("thumbnailer can only handle exactly one URL");
+            process::exit(1);
+        };
+
+        match thumbnail::main(&input, &output, args.size_opt) {
+            Ok(()) => process::exit(0),
+            Err(err) => {
+                log::error!("failed to thumbnail '{}': {}", input, err);
+                process::exit(1);
+            }
+        }
+    }
+
     #[cfg(all(unix, not(target_os = "redox")))]
     match fork::daemon(true, true) {
         Ok(fork::Fork::Child) => (),
@@ -81,11 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
-
     localize::localize();
-
-    let args = argparse::parse();
 
     let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
         Ok(config_handler) => {

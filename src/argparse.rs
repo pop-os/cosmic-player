@@ -1,7 +1,7 @@
 // Copyright 2024 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{fs, io};
+use std::{fs, io, path::PathBuf};
 
 use clap_lex::RawArgs;
 use log::warn;
@@ -25,9 +25,42 @@ pub fn parse() -> Arguments {
                     Err(os_str) => warn!("unexpected flag: -{}", os_str.to_string_lossy()),
                 }
             }
-        } else if let Some((long, _opt_value)) = arg.to_long() {
+        } else if let Some((long, opt_value)) = arg.to_long() {
             match long {
                 Ok("help") => print_help(),
+                Ok("size") => {
+                    if let Some(value) = opt_value
+                        .or_else(|| raw_args.next_os(&mut cursor))
+                        .map(|x| x.to_string_lossy())
+                    {
+                        let mut parts = value.split('x');
+                        let width_str = parts.next().unwrap_or("");
+                        let width = match width_str.parse::<u32>() {
+                            Ok(ok) => ok,
+                            Err(err) => {
+                                warn!("failed to parse size '{}': {}", value, err);
+                                continue;
+                            }
+                        };
+                        let height = match parts.next().unwrap_or(width_str).parse::<u32>() {
+                            Ok(ok) => ok,
+                            Err(err) => {
+                                warn!("failed to parse size '{}': {}", value, err);
+                                continue;
+                            }
+                        };
+                        arguments.size_opt = Some((width, height));
+                    } else {
+                        warn!("size requires value");
+                    }
+                }
+                Ok("thumbnail") => {
+                    if let Some(value) = opt_value.or_else(|| raw_args.next_os(&mut cursor)) {
+                        arguments.thumbnail_opt = Some(PathBuf::from(value));
+                    } else {
+                        warn!("thumbnail requires value");
+                    }
+                }
                 Ok("version") => print_version(),
                 _ => warn!("unexpected flag: {}", arg.display()),
             }
@@ -61,6 +94,8 @@ pub struct Arguments {
     pub urls: Option<Vec<Url>>,
     /// Single URL only
     pub url_opt: Option<Url>,
+    pub thumbnail_opt: Option<PathBuf>,
+    pub size_opt: Option<(u32, u32)>,
 }
 
 // #[derive(Debug)]
@@ -113,8 +148,10 @@ libcosmic-based multimedia player for music and videos.
 Project home page: https://github.com/pop-os/cosmic-player
 
 Options:
-  -h, --help     Show this message
-  -V, --version  Show the version of cosmic-player"#
+  -h, --help               Show this message
+  -V, --version            Show the version of cosmic-player
+  --thumbnail <output>     Generate thumbnail and save in output
+  --size <width>x<height>  Thumbnail size in pixels"#
     );
 
     std::process::exit(0);

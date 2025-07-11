@@ -1,4 +1,8 @@
 /.cargo/
+/debian/*debhelper*
+/debian/cosmic-player.substvars
+/debian/cosmic-player/
+/debian/files
 /target/
 /vendor/
 /vendor.tar

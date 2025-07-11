@@ -20,6 +20,10 @@ metainfo := APPID + '.metainfo.xml'
 metainfo-src := 'res' / metainfo
 metainfo-dst := clean(rootdir / prefix) / 'share' / 'metainfo' / metainfo
 
+thumbnailer := APPID + '.thumbnailer'
+thumbnailer-src := 'res' / thumbnailer
+thumbnailer-dst := clean(rootdir / prefix) / 'share' / 'thumbnailers' / thumbnailer
+
 icons-src := 'res' / 'icons' / 'hicolor'
 icons-dst := clean(rootdir / prefix) / 'share' / 'icons' / 'hicolor'
 
@@ -72,13 +76,20 @@ install:
     install -Dm0755 {{bin-src}} {{bin-dst}}
     install -Dm0644 {{desktop-src}} {{desktop-dst}}
     install -Dm0644 {{metainfo-src}} {{metainfo-dst}}
+    install -Dm0644 {{thumbnailer-src}} {{thumbnailer-dst}}
     for size in `ls {{icons-src}}`; do \
         install -Dm0644 "{{icons-src}}/$size/apps/{{APPID}}.svg" "{{icons-dst}}/$size/apps/{{APPID}}.svg"; \
     done
 
 # Uninstalls installed files
 uninstall:
-    rm {{bin-dst}}
+    rm -f {{bin-dst}}
+    rm -f {{desktop-dst}}
+    rm -f {{metainfo-dst}}
+    rm -f {{thumbnailer-dst}}
+    for size in `ls {{icons-src}}`; do \
+        rm -f "{{icons-dst}}/$size/apps/{{APPID}}.svg"; \
+    done
 
 # Vendor dependencies locally
 vendor:
