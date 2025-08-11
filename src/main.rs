@@ -350,7 +350,7 @@ impl App {
             gst::init().unwrap();
 
             let pipeline = format!(
-                "playbin uri=\"{}\" video-sink=\"videoscale ! videoconvert ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
+                "playbin uri=\"{}\" video-sink=\"videoscale ! videoconvert ! videoflip method=automatic ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
                 url.as_str()
             );
             let pipeline = gst::parse::launch(pipeline.as_ref())
