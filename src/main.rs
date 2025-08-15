@@ -374,8 +374,29 @@ impl App {
                 Ok(ok) => ok,
                 Err(err) => {
                     log::warn!("failed to open {}: {err}", url);
+                    // Handle codecs required before the file can play
+                    let mut commands = Vec::new();
+                    while let Some(msg) = pipeline
+                        .bus()
+                        .unwrap()
+                        .pop_filtered(&[gst::MessageType::Element])
+                    {
+                        match msg.view() {
+                            gst::MessageView::Element(element) => {
+                                if gst_pbutils::MissingPluginMessage::is(&element) {
+                                    commands.push(Command::perform(
+                                        async { message::app(Message::MissingPlugin(msg)) },
+                                        |x| x,
+                                    ));
+                                    // Do one codec install at a time
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                     pipeline.set_state(gst::State::Null).unwrap();
-                    return Command::none();
+                    return Command::batch(commands);
                 }
             }
         };
