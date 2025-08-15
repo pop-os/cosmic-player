@@ -240,6 +240,7 @@ pub enum Message {
     Config(Config),
     ConfigState(ConfigState),
     DropdownToggle(DropdownKind),
+    DurationChanged(Duration),
     FileClose,
     FileLoad(url::Url),
     FileOpen,
@@ -993,6 +994,10 @@ impl Application for App {
                     self.dropdown_opt = Some(menu_kind);
                 }
             }
+            Message::DurationChanged(duration) => {
+                self.duration = duration.as_secs_f64();
+                self.update_mpris_meta();
+            }
             Message::FileClose => {
                 self.close();
             }
@@ -1414,6 +1419,7 @@ impl Application for App {
 
         let mut video_player: Element<_> = VideoPlayer::new(video)
             .mouse_hidden(!self.controls)
+            .on_duration_changed(Message::DurationChanged)
             .on_end_of_stream(Message::EndOfStream)
             .on_missing_plugin(Message::MissingPlugin)
             .on_new_frame(Message::NewFrame)
