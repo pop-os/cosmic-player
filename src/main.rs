@@ -359,7 +359,17 @@ impl App {
                 .downcast::<gst::Pipeline>()
                 .map_err(|_| iced_video_player::Error::Cast)
                 .unwrap();
-
+            pipeline.connect("element-setup", false, |vals| {
+                let Ok(elem) = vals[1].get::<gst::Element>() else {
+                    return None;
+                };
+                if let Some(factory) = elem.factory() {
+                    if factory.name() == "souphttpsrc" {
+                        elem.set_property("user-agent", "Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0");
+                    }
+                }
+                None
+            });
             let video_sink: gst::Element = pipeline.property("video-sink");
             let pad = video_sink.pads().first().cloned().unwrap();
             let pad = pad.dynamic_cast::<gst::GhostPad>().unwrap();
