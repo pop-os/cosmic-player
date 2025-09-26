@@ -1,0 +1,10 @@
+open-file = Iepenje in bestân
+album = Album: { $album }
+audio = Audio
+no-video-or-audio-file-open = Gjin fideo- of audiobestân iepen
+open-folder = Iepenje in map
+subtitles = Ûndertiteling
+unknown-author = Unbekende auteur
+untitled = Gjin titel
+settings = Ynstellings
+match-desktop = Systeemstandert
