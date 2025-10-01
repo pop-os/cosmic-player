@@ -3,7 +3,7 @@
 
 ## Settings
 
-settings = Настройки
+settings = Параметры
 
 ### Appearance
 
