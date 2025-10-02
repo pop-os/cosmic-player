@@ -10,6 +10,7 @@
   <url type="bugtracker">https://github.com/pop-os/cosmic-player</url>
   <name>COSMIC Media Player</name>
   <name xml:lang="ar">مشغّل وسائط COSMIC</name>
+  <name xml:lang="cs">Přehrávač médií COSMIC</name>
   <name xml:lang="hu">COSMIC Médialejátszó</name>
   <name xml:lang="pt_BR">Reprodutor de Mídia</name>
   <name xml:lang="pt">Reprodutor de Mídia</name>
@@ -17,6 +18,7 @@
   <name xml:lang="es">Reproductor de medios COSMIC</name>
   <summary>Media player for the COSMIC desktop</summary>
   <summary xml:lang="ar">مشغّل وسائط لسطح مكتب COSMIC</summary>
+  <summary xml:lang="cs">Přehrávač médií pro pracovní prostředí COSMIC</summary>
   <summary xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</summary>
   <summary xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</summary>
   <summary xml:lang="pt">Reprodutor de mídia do desktop COSMIC</summary>
@@ -25,6 +27,7 @@
   <description>
     <p>Media player for the COSMIC desktop</p>
     <p xml:lang="ar">مشغّل وسائط لسطح مكتب COSMIC</p>
+    <p xml:lang="cs">Přehrávač médií pro pracovní prostředí COSMIC</p>
     <p xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</p>
     <p xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</p>
     <p xml:lang="pt">Reprodutor de mídia do desktop COSMIC</p>
