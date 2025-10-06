@@ -471,7 +471,12 @@ impl App {
             };
             self.text_codes.push(TextCode { id: Some(i), name });
         }
-        self.current_text = Some(pipeline.property::<i32>("current-text"));
+        let current_text = pipeline.property::<i32>("current-text");
+        if current_text >= 0 {
+            self.current_text = Some(current_text);
+        } else {
+            self.current_text = None;
+        }
 
         self.update_flags();
         self.update_mpris_meta();
@@ -659,7 +664,6 @@ impl App {
         };
         let pipeline = video.pipeline();
         let flags_value = pipeline.property_value("flags");
-        println!("original flags {:?}", flags_value);
         match flags_value.transform::<i32>() {
             Ok(flags_transform) => match flags_transform.get::<i32>() {
                 Ok(mut flags) => {
@@ -684,7 +688,6 @@ impl App {
                 log::warn!("failed to transform flags to int: {err}");
             }
         }
-        println!("updated flags {:?}", pipeline.property_value("flags"));
     }
 
     fn update_mpris_meta(&mut self) {
