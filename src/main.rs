@@ -233,6 +233,18 @@ pub enum MprisEvent {
     State(MprisState),
 }
 
+#[derive(Clone, Debug)]
+pub struct TextCode {
+    pub id: Option<i32>,
+    pub name: String,
+}
+
+impl AsRef<str> for TextCode {
+    fn as_ref(&self) -> &str {
+        self.name.as_str()
+    }
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -295,8 +307,8 @@ pub struct App {
     audio_codes: Vec<String>,
     audio_tags: Vec<gst::TagList>,
     current_audio: i32,
-    text_codes: Vec<String>,
-    current_text: i32,
+    text_codes: Vec<TextCode>,
+    current_text: Option<i32>,
 }
 
 impl App {
@@ -320,7 +332,7 @@ impl App {
         self.audio_tags.clear();
         self.current_audio = -1;
         self.text_codes.clear();
-        self.current_text = -1;
+        self.current_text = None;
         self.update_mpris_meta();
         self.update_nav_bar_active();
         was_open
@@ -441,46 +453,27 @@ impl App {
         self.current_audio = pipeline.property::<i32>("current-audio");
 
         let n_text = pipeline.property::<i32>("n-text");
-        self.text_codes = Vec::with_capacity(n_text as usize);
+        self.text_codes = Vec::with_capacity(n_text as usize + 1);
+        self.text_codes.push(TextCode {
+            id: None,
+            name: fl!("off"),
+        });
         for i in 0..n_text {
             let tags: gst::TagList = pipeline.emit_by_name("get-text-tags", &[&i]);
             log::info!("text stream {i}: {tags:#?}");
-            self.text_codes
-                .push(if let Some(title) = tags.get::<gst::tags::Title>() {
-                    title.get().to_string()
-                } else if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
-                    let language_code = language_code.get();
-                    language_name(language_code).unwrap_or_else(|| language_code.to_string())
-                } else {
-                    format!("Subtitle #{i}")
-                });
+            let name = if let Some(title) = tags.get::<gst::tags::Title>() {
+                title.get().to_string()
+            } else if let Some(language_code) = tags.get::<gst::tags::LanguageCode>() {
+                let language_code = language_code.get();
+                language_name(language_code).unwrap_or_else(|| language_code.to_string())
+            } else {
+                format!("Subtitle #{i}")
+            };
+            self.text_codes.push(TextCode { id: Some(i), name });
         }
-        self.current_text = pipeline.property::<i32>("current-text");
+        self.current_text = Some(pipeline.property::<i32>("current-text"));
 
-        //TODO: Flags can be used to enable/disable subtitles
-        let flags_value = pipeline.property_value("flags");
-        println!("original flags {:?}", flags_value);
-        match flags_value.transform::<i32>() {
-            Ok(flags_transform) => match flags_transform.get::<i32>() {
-                Ok(mut flags) => {
-                    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_TEXT;
-                    match gst::glib::Value::from(flags).transform_with_type(flags_value.type_()) {
-                        Ok(value) => pipeline.set_property("flags", value),
-                        Err(err) => {
-                            log::warn!("failed to transform int to flags: {err}");
-                        }
-                    }
-                }
-                Err(err) => {
-                    log::warn!("failed to get flags as int: {err}");
-                }
-            },
-            Err(err) => {
-                log::warn!("failed to transform flags to int: {err}");
-            }
-        }
-        println!("updated flags {:?}", pipeline.property_value("flags"));
-
+        self.update_flags();
         self.update_mpris_meta();
         self.update_title()
     }
@@ -658,6 +651,40 @@ impl App {
 
     fn update_config(&mut self) -> Command<Message> {
         cosmic::app::command::set_theme(self.flags.config.app_theme.theme())
+    }
+
+    fn update_flags(&mut self) {
+        let Some(video) = &mut self.video_opt else {
+            return;
+        };
+        let pipeline = video.pipeline();
+        let flags_value = pipeline.property_value("flags");
+        println!("original flags {:?}", flags_value);
+        match flags_value.transform::<i32>() {
+            Ok(flags_transform) => match flags_transform.get::<i32>() {
+                Ok(mut flags) => {
+                    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+                    if self.current_text.is_some() {
+                        flags |= GST_PLAY_FLAG_TEXT;
+                    } else {
+                        flags &= !GST_PLAY_FLAG_TEXT;
+                    }
+                    match gst::glib::Value::from(flags).transform_with_type(flags_value.type_()) {
+                        Ok(value) => pipeline.set_property("flags", value),
+                        Err(err) => {
+                            log::warn!("failed to transform int to flags: {err}");
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!("failed to get flags as int: {err}");
+                }
+            },
+            Err(err) => {
+                log::warn!("failed to transform flags to int: {err}");
+            }
+        }
+        println!("updated flags {:?}", pipeline.property_value("flags"));
     }
 
     fn update_mpris_meta(&mut self) {
@@ -870,7 +897,7 @@ impl Application for App {
             audio_tags: Vec::new(),
             current_audio: -1,
             text_codes: Vec::new(),
-            current_text: -1,
+            current_text: None,
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1176,13 +1203,18 @@ impl Application for App {
                     }
                 }
             }
-            Message::TextCode(code) => {
-                if let Ok(code) = i32::try_from(code) {
-                    if let Some(video) = &self.video_opt {
-                        let pipeline = video.pipeline();
-                        pipeline.set_property("current-text", code);
-                        self.current_text = pipeline.property("current-text");
+            Message::TextCode(index) => {
+                if let Some(text_code) = self.text_codes.get(index) {
+                    if let Some(id) = text_code.id {
+                        if let Some(video) = &self.video_opt {
+                            let pipeline = video.pipeline();
+                            pipeline.set_property("current-text", id);
+                            self.current_text = Some(pipeline.property("current-text"));
+                        }
+                    } else {
+                        self.current_text = None;
                     }
+                    self.update_flags();
                 }
             }
             Message::Pause | Message::Play | Message::PlayPause => {
@@ -1548,12 +1580,13 @@ impl Application for App {
                         );
                     }
                     if !self.text_codes.is_empty() {
-                        //TODO: allow toggling subtitles
                         items.push(widget::text::heading(fl!("subtitles")).into());
                         items.push(
                             widget::dropdown(
                                 &self.text_codes,
-                                usize::try_from(self.current_text).ok(),
+                                self.text_codes
+                                    .iter()
+                                    .position(|x| x.id == self.current_text),
                                 Message::TextCode,
                             )
                             .into(),

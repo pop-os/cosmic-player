@@ -1,6 +1,7 @@
 album = Album: {$album}
 audio = Audio
 no-video-or-audio-file-open = No video or audio file open
+off = Off
 open-file = Open file
 open-folder = Open folder
 subtitles = Subtitles
