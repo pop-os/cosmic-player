@@ -20,3 +20,4 @@ close-media-folder = Lukk mediamappen
 quit = Avslutt
 match-desktop = Følg skrivebordet
 open-recent-media-folder = Åpne nylig brukt mediemappe
+off = Av
