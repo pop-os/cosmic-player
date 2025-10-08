@@ -12,6 +12,7 @@
   <name xml:lang="ar">مشغّل وسائط COSMIC</name>
   <name xml:lang="cs">Přehrávač médií COSMIC</name>
   <name xml:lang="hu">COSMIC Médialejátszó</name>
+  <name xml:lang="pl">Odtwarzacz Multimediów COSMIC</name>
   <name xml:lang="pt_BR">Reprodutor de Mídia</name>
   <name xml:lang="pt">Reprodutor de Mídia</name>
   <name xml:lang="sk">Prehrávač Médií COSMIC</name>
@@ -20,6 +21,7 @@
   <summary xml:lang="ar">مشغّل وسائط لسطح مكتب COSMIC</summary>
   <summary xml:lang="cs">Přehrávač médií pro pracovní prostředí COSMIC</summary>
   <summary xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</summary>
+  <summary xml:lang="pl">Odtwarzacz Multimediów dla środowiska graficznego COSMIC</summary>
   <summary xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</summary>
   <summary xml:lang="pt">Reprodutor de mídia do desktop COSMIC</summary>
   <summary xml:lang="sk">Prehrávač médií pre pracovné prostredie COSMIC</summary>
@@ -29,6 +31,7 @@
     <p xml:lang="ar">مشغّل وسائط لسطح مكتب COSMIC</p>
     <p xml:lang="cs">Přehrávač médií pro pracovní prostředí COSMIC</p>
     <p xml:lang="hu">Médialejátszó a COSMIC asztali környezethez</p>
+    <p xml:lang="pl">Odtwarzacz Multimediów dla środowiska graficznego COSMIC</p>
     <p xml:lang="pt_BR">Reprodutor de mídia do desktop COSMIC</p>
     <p xml:lang="pt">Reprodutor de mídia do desktop COSMIC</p>
     <p xml:lang="sk">Prehrávač médií pre pracovné prostredie COSMIC</p>
