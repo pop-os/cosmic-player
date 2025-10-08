@@ -20,3 +20,4 @@ open-media-folder = Ava meediumikaust...
 open-recent-media-folder = Ava hiljutine meediumikaust
 close-media-folder = Sulge meediumikaust
 quit = Välju
+off = Väljas

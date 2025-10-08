@@ -1,4 +1,4 @@
-album = Album: {$album}
+album = Album: { $album }
 audio = Ljud
 no-video-or-audio-file-open = Ingen video eller ljudfil är öppen
 open-file = Öppna fil
@@ -9,10 +9,13 @@ untitled = Namnlös
 
 # Kontextsidor
 
+
 ## Inställningar
+
 settings = Inställningar
 
 ### Utseende
+
 appearance = Utseende
 theme = Tema
 match-desktop = Matcha skrivbordet
@@ -21,7 +24,9 @@ light = Ljust
 
 # Meny
 
+
 ## Fil
+
 file = Fil
 open-media = Öppna media...
 open-recent-media = Öppna senaste media
@@ -30,3 +35,4 @@ open-media-folder = Öppna mediamappen...
 open-recent-media-folder = Öppna mappen för senaste media
 close-media-folder = Stäng mediamappen
 quit = Avsluta
+off = Av

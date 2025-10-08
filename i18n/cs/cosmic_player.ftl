@@ -1,6 +1,6 @@
 album = Album: { $album }
 audio = Zvuk
-no-video-or-audio-file-open = Není otevřen žádný soubor
+no-video-or-audio-file-open = Není otevřen žádný mediální soubor
 open-file = Otevřít soubor
 open-folder = Otevřít složku
 subtitles = Titulky
@@ -20,3 +20,4 @@ open-media-folder = Otevřít složku s médii...
 open-recent-media-folder = Otevřít nedávnou složku s médii
 close-media-folder = Zavřít složku s médii
 quit = Ukončit
+off = Vypnuto

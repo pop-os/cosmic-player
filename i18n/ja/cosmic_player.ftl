@@ -35,3 +35,4 @@ close-media-folder = メディアフォルダを閉じる
 close-file = ファイルを閉じる
 quit = 終了
 unknown-author = 不明な作成者
+off = オフ
