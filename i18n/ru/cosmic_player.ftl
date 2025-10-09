@@ -7,7 +7,7 @@ settings = Параметры
 
 ### Appearance
 
-appearance = Внешний вид
+appearance = Оформление
 theme = Тема
 match-desktop = Как в системе
 dark = Тёмная
@@ -28,3 +28,4 @@ open-media-folder = Открыть папку медиафайлов…
 open-recent-media-folder = Недавние папки медиафайлов
 close-media-folder = Закрыть папку медиафайлов
 quit = Выйти
+off = Выкл.

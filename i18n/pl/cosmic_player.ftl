@@ -1,6 +1,6 @@
 album = Album: { $album }
-audio = Audio
-no-video-or-audio-file-open = Brak otwartego pliku audio lub wideo
+audio = Dźwięk
+no-video-or-audio-file-open = Brak otwartego pliku dźwiękowego lub wideo
 open-file = Otwórz plik
 open-folder = Otwórz katalog
 subtitles = Napisy
@@ -35,3 +35,4 @@ open-media-folder = Otwórz katalog z nośnikami...
 open-recent-media-folder = Otwórz poprzedni katalog z nośnikami
 close-media-folder = Zamknij katalog z nośnikami
 quit = Zamknij
+off = Wyłączone

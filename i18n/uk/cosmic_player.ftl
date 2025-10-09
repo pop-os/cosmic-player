@@ -19,4 +19,5 @@ close-file = Закрити файл
 open-media-folder = Відкрити теку з медіа...
 open-recent-media-folder = Відкрити нещодавню теку з медіа
 close-media-folder = Закрити теку з медіа
-quit = Вийти
+quit = Закрити
+off = Вигляд

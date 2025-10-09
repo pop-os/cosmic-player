@@ -35,3 +35,4 @@ open-media-folder = Отваряне на папката за медия...
 open-recent-media-folder = Отваряне на последната папка с медии
 close-media-folder = Затваряне на папката за медия
 quit = Спиране на програмата
+off = Изкл.

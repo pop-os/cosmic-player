@@ -35,3 +35,4 @@ open-media-folder = افتح مجلّد الوسائط...
 open-recent-media-folder = افتح مجلّد الوسائط الحديثة
 close-media-folder = أغلِق مجلّد الوسائط
 quit = أنهِ
+off = معطّل

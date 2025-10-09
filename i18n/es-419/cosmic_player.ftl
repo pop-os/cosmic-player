@@ -35,3 +35,4 @@ open-media-folder = Abrir carpeta de medios...
 open-recent-media-folder = Abrir carpeta de medios reciente
 close-media-folder = Cerrar carpeta de medios
 quit = Cerrar
+off = Apagado
