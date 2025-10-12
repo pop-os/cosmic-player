@@ -19,3 +19,5 @@ open-media-folder = Адкрыць медыя папку...
 open-recent-media-folder = Адкрыць нядаўняю медыя папку
 close-media-folder = Закрыць медыя папку
 quit = Выйсці
+off = Выкл.
+match-desktop = Як у сістэме
