@@ -31,19 +31,43 @@ pub fn menu_bar<'a>(
         }
     };
 
-    let mut recent_files = Vec::with_capacity(config_state.recent_files.len());
+    let files_len = if config_state.recent_files.is_empty() {
+        0
+    } else {
+        config_state.recent_files.len() + 2
+    };
+    let mut recent_files = Vec::with_capacity(files_len);
     for (i, path) in config_state.recent_files.iter().enumerate() {
         recent_files.push(menu::Item::Button(
             format_url(path),
             Action::FileOpenRecent(i),
         ));
     }
+    if files_len > 0 {
+        recent_files.push(menu::Item::Divider);
+        recent_files.push(menu::Item::Button(
+            fl!("clear-recent"),
+            Action::FileClearRecents,
+        ));
+    }
 
-    let mut recent_projects = Vec::with_capacity(config_state.recent_projects.len());
+    let projects_len = if config_state.recent_projects.is_empty() {
+        0
+    } else {
+        config_state.recent_projects.len() + 2
+    };
+    let mut recent_projects = Vec::with_capacity(projects_len);
     for (i, path) in config_state.recent_projects.iter().enumerate() {
         recent_projects.push(menu::Item::Button(
             format_path(path),
             Action::FolderOpenRecent(i),
+        ));
+    }
+    if projects_len > 0 {
+        recent_projects.push(menu::Item::Divider);
+        recent_projects.push(menu::Item::Button(
+            fl!("clear-recent"),
+            Action::FolderClearRecents,
         ));
     }
 

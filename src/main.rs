@@ -158,9 +158,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 pub enum Action {
     FileClose,
     FileOpen,
+    FileClearRecents,
     FileOpenRecent(usize),
     FolderClose(usize),
     FolderOpen,
+    FolderClearRecents,
     FolderOpenRecent(usize),
     Fullscreen,
     PlayPause,
@@ -176,9 +178,11 @@ impl MenuAction for Action {
         match self {
             Self::FileClose => Message::FileClose,
             Self::FileOpen => Message::FileOpen,
+            Self::FileClearRecents => Message::FileClearRecents,
             Self::FileOpenRecent(index) => Message::FileOpenRecent(*index),
             Self::FolderClose(index) => Message::FolderClose(*index),
             Self::FolderOpen => Message::FolderOpen,
+            Self::FolderClearRecents => Message::FolderClearRecents,
             Self::FolderOpenRecent(index) => Message::FolderOpenRecent(*index),
             Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
@@ -256,10 +260,12 @@ pub enum Message {
     FileClose,
     FileLoad(url::Url),
     FileOpen,
+    FileClearRecents,
     FileOpenRecent(usize),
     FolderClose(usize),
     FolderLoad(PathBuf),
     FolderOpen,
+    FolderClearRecents,
     FolderOpenRecent(usize),
     MultipleLoad(Vec<url::Url>),
     Fullscreen,
@@ -1065,6 +1071,10 @@ impl Application for App {
                     |x| x,
                 );
             }
+            Message::FileClearRecents => {
+                self.flags.config_state.recent_files.clear();
+                self.save_config_state();
+            }
             Message::FileOpenRecent(index) => {
                 if let Some(url) = self.flags.config_state.recent_files.get(index) {
                     return self.update(Message::FileLoad(url.clone()));
@@ -1136,6 +1146,10 @@ impl Application for App {
                 if let Some(path) = self.flags.config_state.recent_projects.get(index) {
                     return self.update(Message::FolderLoad(path.clone()));
                 }
+            }
+            Message::FolderClearRecents => {
+                self.flags.config_state.recent_projects.clear();
+                self.save_config_state();
             }
             Message::MultipleLoad(urls) => {
                 log::trace!("Loading multiple URLs: {urls:?}");
