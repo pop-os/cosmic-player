@@ -1181,6 +1181,7 @@ impl Application for App {
 
                 self.fullscreen = !self.fullscreen;
                 self.core.window.show_headerbar = !self.fullscreen;
+                self.controls = !self.fullscreen;
                 return window::change_mode(
                     window::Id::MAIN,
                     if self.fullscreen {
