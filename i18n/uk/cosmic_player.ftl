@@ -1,8 +1,8 @@
-no-video-or-audio-file-open = Не відкрито ніякого відео чи аудіо файлу
+no-video-or-audio-file-open = Немає відкритих відео- або аудіофайлів
 open-file = Відкрити файл
 open-folder = Відкрити теку
 album = Альбом: { $album }
-audio = Аудіо
+audio = Звук
 subtitles = Субтитри
 unknown-author = Невідомий автор
 untitled = Без назви
