@@ -28,11 +28,12 @@ light = Jasny
 ## File
 
 file = Plik
-open-media = Otwórz nośnik...
+open-media = Otwórz nośnik…
 open-recent-media = Otwórz poprzedni nośnik
 close-file = Zamknij plik
-open-media-folder = Otwórz katalog z nośnikami...
+open-media-folder = Otwórz katalog z nośnikami…
 open-recent-media-folder = Otwórz poprzedni katalog z nośnikami
 close-media-folder = Zamknij katalog z nośnikami
 quit = Zamknij
 off = Wyłączone
+clear-recent = Wyczyść listę poprzednich

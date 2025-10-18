@@ -21,3 +21,4 @@ open-recent-media-folder = Otevřít nedávnou složku s médii
 close-media-folder = Zavřít složku s médii
 quit = Ukončit
 off = Vypnuto
+clear-recent = Vymazat seznam nedávných
