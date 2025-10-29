@@ -1,6 +1,6 @@
 album = Album: { $album }
 audio = Ljud
-no-video-or-audio-file-open = Ingen video eller ljudfil är öppen
+no-video-or-audio-file-open = Ingen video- eller ljudfil är öppen
 open-file = Öppna fil
 open-folder = Öppna mapp
 subtitles = Undertexter
@@ -36,3 +36,4 @@ open-recent-media-folder = Öppna mappen för senaste media
 close-media-folder = Stäng mediamappen
 quit = Avsluta
 off = Av
+clear-recent = Töm senaste-listan
