@@ -28,3 +28,4 @@ quit = बंद करें
 no-video-or-audio-file-open = कोई वीडियो या ऑडियो फ़ाइल खुली नहीं है
 open-media = मीडिया खोलें…
 open-recent-media = हाल का मीडिया खोलें
+off = बंद
