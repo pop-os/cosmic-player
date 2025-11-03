@@ -7,10 +7,8 @@ edition = "2021"
 vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
-dirs = "5"
 gstreamer-tag = "0.23"
 image = "0.24.9"
-lazy_static = "1"
 serde = { version = "1", features = ["serde_derive"] }
 tempfile = "3"
 tokio = { version = "1", features = ["sync"] }
@@ -44,10 +42,6 @@ features = ["tokio", "winit"]
 [dependencies.mpris-server]
 version = "0.8.1"
 optional = true
-
-[dependencies.smol_str]
-version = "0.2.1"
-features = ["serde"]
 
 [target.'cfg(unix)'.dependencies]
 fork = "0.2"

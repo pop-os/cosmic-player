@@ -103,20 +103,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     localize::localize();
 
-    let (config_handler, config) = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
+    let config = match cosmic_config::Config::new(App::APP_ID, CONFIG_VERSION) {
         Ok(config_handler) => {
-            let config = match Config::get_entry(&config_handler) {
+            match Config::get_entry(&config_handler) {
                 Ok(ok) => ok,
                 Err((errs, config)) => {
                     log::error!("errors loading config: {:?}", errs);
                     config
                 }
-            };
-            (Some(config_handler), config)
+            }
         }
         Err(err) => {
             log::error!("failed to create config handler: {}", err);
-            (None, Config::default())
+            Config::default()
         }
     };
 
@@ -142,7 +141,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
     let flags = Flags {
-        config_handler,
         config,
         config_state_handler,
         config_state,
@@ -195,7 +193,6 @@ impl MenuAction for Action {
 
 #[derive(Clone)]
 pub struct Flags {
-    config_handler: Option<cosmic_config::Config>,
     config: Config,
     config_state_handler: Option<cosmic_config::Config>,
     config_state: ConfigState,
@@ -1420,7 +1417,7 @@ impl Application for App {
         Command::none()
     }
 
-    fn header_start(&self) -> Vec<Element<Self::Message>> {
+    fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         vec![menu::menu_bar(
             &self.flags.config,
             &self.flags.config_state,
@@ -1430,7 +1427,7 @@ impl Application for App {
     }
 
     /// Creates a view after each update.
-    fn view(&self) -> Element<Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let theme = theme::active();
         let cosmic_theme::Spacing {
             space_xxs,

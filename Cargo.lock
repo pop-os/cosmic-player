@@ -1083,7 +1083,6 @@ name = "cosmic-player"
 version = "0.1.0"
 dependencies = [
  "clap_lex",
- "dirs",
  "env_logger",
  "fork",
  "gstreamer-tag",
@@ -1093,13 +1092,11 @@ dependencies = [
  "icu_collator",
  "icu_provider",
  "image",
- "lazy_static",
  "libcosmic",
  "log",
  "mpris-server",
  "rust-embed",
  "serde",
- "smol_str",
  "tempfile",
  "tokio",
  "url",
