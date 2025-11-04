@@ -3,7 +3,7 @@
 
 ## Settings
 
-settings = सेटिंग्स
+settings = सेटिंग
 
 ### Appearance
 
