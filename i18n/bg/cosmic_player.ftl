@@ -17,7 +17,7 @@ settings = Настройки
 ### Appearance
 
 appearance = Външен вид
-theme = Стил
+theme = Тема
 match-desktop = Системен
 dark = Тъмен
 light = Светъл

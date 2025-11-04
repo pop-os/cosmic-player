@@ -1,4 +1,4 @@
-album = Album: {$album}
+album = Album: { $album }
 audio = Audio
 no-video-or-audio-file-open = Keine Video- oder Audiodatei geöffnet
 open-file = Datei öffnen
@@ -9,10 +9,13 @@ untitled = Unbenannt
 
 # Kontextseiten
 
+
 ## Einstellungen
+
 settings = Einstellungen
 
 ### Aussehen
+
 appearance = Aussehen
 theme = Thema
 match-desktop = An Desktop anpassen
@@ -21,7 +24,9 @@ light = Hell
 
 # Menü
 
+
 ## Datei
+
 file = Datei
 open-media = Medium öffnen...
 open-recent-media = Zuletzt verwendete Medien öffnen
