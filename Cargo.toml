@@ -32,14 +32,13 @@ log = "0.4"
 
 [dependencies.iced_video_player]
 git = "https://github.com/jackpot51/iced_video_player.git"
-branch = "prev-cosmic"
+branch = "cosmic"
 default-features = false
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-branch = "prev-master"
 default-features = false
-features = ["tokio", "winit"]
+features = ["tokio", "winit", "multi-window", "surface-message", "wgpu"]
 
 [dependencies.mpris-server]
 version = "0.8.1"
@@ -61,10 +60,10 @@ wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 inherits = "release"
 debug = true
 
-# [patch.'https://github.com/jackpot51/iced_video_player']
-# iced_video_player = { path = "../../iced_video_player" }
+[patch.'https://github.com/jackpot51/iced_video_player']
+iced_video_player = { path = "../iced_video_player" }
 
-# [patch.'https://github.com/pop-os/libcosmic']
-# libcosmic = { path = "../libcosmic" }
-# cosmic-config = { path = "../libcosmic/cosmic-config" }
-# cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+[patch.'https://github.com/pop-os/libcosmic']
+libcosmic = { path = "../libcosmic" }
+cosmic-config = { path = "../libcosmic/cosmic-config" }
+cosmic-theme = { path = "../libcosmic/cosmic-theme" }
