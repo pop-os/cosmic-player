@@ -1,8 +1,10 @@
 use cosmic::iced_core::image::Data;
-use iced_video_player::{Position, Video};
+use iced_video_player::{Position};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use std::{error::Error, num::NonZero, path::Path, time::Duration};
 use url::Url;
+
+use super::video;
 
 pub fn main(
     input: &Url,
@@ -11,7 +13,11 @@ pub fn main(
 ) -> Result<(), Box<dyn Error>> {
     let mut image = {
         let thumbnails = {
-            let mut video = Video::new(input)?;
+            let mut video = match video::new_video(input) {
+                Ok(ok) => ok,
+                Err(_err) => return Err(Into::into(format!("missing required plugin")))
+            };
+
             let duration = video.duration();
             //TODO: how best to decide time?
             let position = if duration.as_secs_f64() < 20.0 {
