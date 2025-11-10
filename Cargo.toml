@@ -1,12 +1,13 @@
 [package]
 name = "cosmic-player"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
+ashpd = { version = "0.12", optional = true }
 gstreamer-tag = "0.23"
 image = "0.24.9"
 serde = { version = "1", features = ["serde_derive"] }
@@ -48,7 +49,7 @@ fork = "0.2"
 
 [features]
 default = ["mpris-server", "xdg-portal", "wgpu"]
-xdg-portal = ["libcosmic/xdg-portal"]
+xdg-portal = ["ashpd", "libcosmic/xdg-portal"]
 wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 
 [profile.release-with-debug]

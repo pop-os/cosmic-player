@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    theme,
-    widget::menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
-    Element,
+    Element, theme,
+    widget::menu::{self, ItemHeight, ItemWidth, MenuBar, key_bind::KeyBind},
 };
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::{fl, Action, Config, ConfigState, Message};
+use crate::{Action, Config, ConfigState, Message, fl};
 
 pub fn menu_bar<'a>(
     _config: &Config,

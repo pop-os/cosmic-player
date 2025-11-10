@@ -2,23 +2,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    app::{command, message, Command, Core, Settings},
+    Application, ApplicationExt, Element,
+    app::{Command, Core, Settings, command, message},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor, font,
     iced::{
+        Alignment, Background, Border, Color, ContentFit, Length, Limits,
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::{Event as MouseEvent, ScrollDelta},
         subscription::Subscription,
-        window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
+        window,
     },
     iced_style, theme,
-    widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
-    Application, ApplicationExt, Element,
+    widget::{self, Slider, menu::action::MenuAction, nav_bar, segmented_button},
 };
 use iced_video_player::{
+    Video, VideoPlayer,
     gst::{self, prelude::*},
-    gst_pbutils, Video, VideoPlayer,
+    gst_pbutils,
 };
 use std::{
     any::TypeId,
@@ -32,8 +34,8 @@ use std::{
 use tokio::sync::mpsc;
 
 use crate::{
-    config::{Config, ConfigState, CONFIG_VERSION},
-    key_bind::{key_binds, KeyBind},
+    config::{CONFIG_VERSION, Config, ConfigState},
+    key_bind::{KeyBind, key_binds},
     project::ProjectNode,
 };
 
@@ -47,6 +49,8 @@ mod mpris;
 mod project;
 mod thumbnail;
 mod video;
+#[cfg(feature = "xdg-portal")]
+mod xdg_portals;
 
 static CONTROLS_TIMEOUT: Duration = Duration::new(2, 0);
 
@@ -141,6 +145,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
+   
     let flags = Flags {
         config,
         config_state_handler,
@@ -313,6 +318,8 @@ pub struct App {
     current_audio: i32,
     text_codes: Vec<TextCode>,
     current_text: Option<i32>,
+    #[cfg(feature = "xdg-portal")]
+    inhibit: tokio::sync::watch::Sender<bool>,
 }
 
 impl App {
@@ -339,6 +346,7 @@ impl App {
         self.current_text = None;
         self.update_mpris_meta();
         self.update_nav_bar_active();
+        self.allow_idle();
         was_open
     }
 
@@ -363,7 +371,7 @@ impl App {
 
         let video = match video::new_video(&url) {
             Ok(ok) => ok,
-            Err(err) => return err
+            Err(err) => return err,
         };
 
         self.duration = video.duration().as_secs_f64();
@@ -420,6 +428,7 @@ impl App {
             self.current_text = None;
         }
 
+        self.inhibit_idle();
         self.update_flags();
         self.update_mpris_meta();
         self.update_title()
@@ -792,6 +801,20 @@ impl App {
         let title = "COSMIC Media Player";
         self.set_window_title(title.to_string())
     }
+
+    /// Allow screen to dim or turn off if there is no input from the user.
+    ///
+    /// Basically, undo [`Self::inhibit_idle`].
+    fn allow_idle(&self) {
+        #[cfg(feature = "xdg-portal")]
+        let _ = self.inhibit.send(false);
+    }
+
+    /// Prevent screen from dimming or turning off if there is no keyboard/mouse input.
+    fn inhibit_idle(&self) {
+        #[cfg(feature = "xdg-portal")]
+        let _ = self.inhibit.send(true);
+    }
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -820,6 +843,13 @@ impl Application for App {
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Command<Self::Message>) {
         core.window.content_container = false;
 
+        #[cfg(feature = "xdg-portal")]
+        let inhibit = {
+            let (tx, rx) = tokio::sync::watch::channel(false);
+            std::mem::drop(tokio::spawn(crate::xdg_portals::inhibit(rx)));
+            tx
+        };
+
         let mut app = App {
             core,
             flags,
@@ -843,6 +873,8 @@ impl Application for App {
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: None,
+            #[cfg(feature = "xdg-portal")]
+            inhibit,
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1176,12 +1208,18 @@ impl Application for App {
                 self.dropdown_opt = None;
 
                 if let Some(video) = &mut self.video_opt {
-                    video.set_paused(match message {
+                    let pause = match message {
                         Message::Play => false,
                         Message::Pause => true,
                         _ => !video.paused(),
-                    });
+                    };
+                    video.set_paused(pause);
                     self.update_controls(true);
+                    if pause {
+                        self.allow_idle();
+                    } else {
+                        self.inhibit_idle();
+                    }
                 }
             }
             Message::Scrolled(delta) => {
