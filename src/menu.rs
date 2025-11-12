@@ -10,12 +10,12 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{fl, Action, Config, ConfigState, Message};
 
 pub fn menu_bar<'a>(
-    config: &Config,
+    _config: &Config,
     config_state: &ConfigState,
     key_binds: &HashMap<KeyBind, Action>,
-    projects: &Vec<(String, PathBuf)>,
+    projects: &[(String, PathBuf)],
 ) -> Element<'a, Message> {
-    let home_dir_opt = dirs::home_dir();
+    let home_dir_opt = std::env::home_dir();
     let format_path = |path: &PathBuf| -> String {
         if let Some(home_dir) = &home_dir_opt {
             if let Ok(part) = path.strip_prefix(home_dir) {
