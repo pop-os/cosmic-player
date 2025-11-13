@@ -36,3 +36,4 @@ open-recent-media-folder = Legutóbbi médiamappa megnyitása
 close-media-folder = Médiamappa bezárása
 quit = Kilépés
 off = Ki
+clear-recent = Legutóbbiak listájának törlése
