@@ -3,12 +3,12 @@ use cosmic::iced::{
     subscription::{self, Subscription},
 };
 use mpris_server::{
-    zbus::{fdo, Result},
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
     Server, Signal, Time, TrackId, Volume,
+    zbus::{Result, fdo},
 };
 use std::{any::TypeId, future, process};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{Mutex, mpsc};
 
 use crate::{Message, MprisEvent, MprisMeta, MprisState};
 

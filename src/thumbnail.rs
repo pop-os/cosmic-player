@@ -1,5 +1,5 @@
 use cosmic::iced_core::image::Data;
-use iced_video_player::{Position};
+use iced_video_player::Position;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use std::{error::Error, num::NonZero, path::Path, time::Duration};
 use url::Url;
@@ -15,7 +15,7 @@ pub fn main(
         let thumbnails = {
             let mut video = match video::new_video(input) {
                 Ok(ok) => ok,
-                Err(_err) => return Err(Into::into(format!("missing required plugin")))
+                Err(_err) => return Err(Into::into(format!("missing required plugin"))),
             };
 
             let duration = video.duration();
