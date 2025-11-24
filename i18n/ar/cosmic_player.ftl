@@ -1,8 +1,8 @@
 album = ألبوم: { $album }
 audio = الصوت
 no-video-or-audio-file-open = لا يوجد ملف فيديو أو صوت مفتوح
-open-file = فتح ملف
-open-folder = فتح مجلد
+open-file = افتح ملف
+open-folder = افتح مجلد
 subtitles = الترجمة
 unknown-author = مؤلف مجهول
 untitled = بلا عنوان
@@ -18,7 +18,7 @@ settings = الإعدادات
 
 appearance = المظهر
 theme = الثيم
-match-desktop = مطابقة مع سطح المكتب
+match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
 
@@ -34,5 +34,5 @@ close-file = إغلاق الملف
 open-media-folder = فتح مجلد الوسائط...
 open-recent-media-folder = فتح مجلد الوسائط الحديثة
 close-media-folder = غلق مجلد الوسائط
-quit = خروج
+quit = أنهِ
 off = معطل
