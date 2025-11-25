@@ -1,7 +1,7 @@
 album = ألبوم: { $album }
 audio = الصوت
 no-video-or-audio-file-open = لا يوجد ملف فيديو أو صوت مفتوح
-open-file = فتح ملف
+open-file = افتح ملف
 open-folder = افتح مجلد
 subtitles = الترجمة
 unknown-author = مؤلف مجهول
