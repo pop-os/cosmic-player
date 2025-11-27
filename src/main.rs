@@ -232,6 +232,7 @@ pub struct MprisState {
     position_micros: i64,
     paused: bool,
     volume: f64,
+    will_repeat: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -742,10 +743,15 @@ impl App {
                 position_micros: (self.position * 1_000_000.0) as i64,
                 paused: true,
                 volume: 0.0,
+                will_repeat: false,
             };
             if let Some(video) = &self.video_opt {
                 new.paused = video.paused();
                 new.volume = video.volume();
+
+                let repeat_state = &self.flags.config_state.player_state.repeat;
+                new.will_repeat = *repeat_state == RepeatState::Always
+                    || (*repeat_state == RepeatState::Once && !self.has_media_repeated);
             }
             if new != *old {
                 *old = new.clone();

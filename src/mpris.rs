@@ -10,7 +10,7 @@ use mpris_server::{
 use std::{any::TypeId, future, process};
 use tokio::sync::{Mutex, mpsc};
 
-use crate::{Message, MprisEvent, MprisMeta, MprisState};
+use crate::{Message, MprisEvent, MprisMeta, MprisState, config::RepeatState};
 
 impl MprisMeta {
     fn metadata(&self) -> Metadata {
@@ -56,6 +56,16 @@ impl MprisState {
             PlaybackStatus::Paused
         } else {
             PlaybackStatus::Playing
+        }
+    }
+
+    fn loop_status(&self) -> LoopStatus {
+        if self.will_repeat {
+            // TODO: Our choice is between Track and Playlist. Track is the best match for current repeat behavior,
+            // but this may change when we implement mpris playlists.
+            LoopStatus::Track
+        } else {
+            LoopStatus::None
         }
     }
 }
@@ -194,11 +204,19 @@ impl PlayerInterface for Player {
 
     async fn loop_status(&self) -> fdo::Result<LoopStatus> {
         log::info!("LoopStatus");
-        Ok(LoopStatus::None)
+        let state = self.state.lock().await;
+        Ok(state.loop_status())
     }
 
     async fn set_loop_status(&self, loop_status: LoopStatus) -> Result<()> {
         log::info!("SetLoopStatus({})", loop_status);
+        let repeat_state = if loop_status == LoopStatus::None {
+            RepeatState::Disabled
+        } else {
+            // TODO: This may change when we implement mpris playlists.
+            RepeatState::Always
+        };
+        self.message(Message::RepeatToggled(repeat_state)).await?;
         Ok(())
     }
 
@@ -417,6 +435,10 @@ pub fn subscription() -> Subscription<Message> {
                                     sigs.push(Signal::Seeked {
                                         position: Time::from_micros(new.position_micros),
                                     });
+                                }
+                                let new_loop_status = new.loop_status();
+                                if new_loop_status != old.loop_status() {
+                                    props.push(Property::LoopStatus(new_loop_status));
                                 }
                                 *old = new;
                             }
