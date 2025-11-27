@@ -1656,7 +1656,7 @@ impl Application for App {
                     )
                     .on_press(Message::PlayPause),
                 );
-            row = row.push(
+            row = row.push(widget::tooltip(
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
                         RepeatState::Disabled => "media-playlist-no-repeat-symbolic",
@@ -1672,7 +1672,13 @@ impl Application for App {
                         RepeatState::Once => RepeatState::Disabled,
                     },
                 )),
-            );
+                match self.flags.config_state.player_state.repeat {
+                    RepeatState::Disabled => fl!("repeat-disabled"),
+                    RepeatState::Always => fl!("repeat-always"),
+                    RepeatState::Once => fl!("repeat-once"),
+                },
+                widget::tooltip::Position::Top,
+            ));
             if self.core.is_condensed() {
                 row = row.push(widget::horizontal_space(Length::Fill));
             } else {

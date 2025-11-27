@@ -32,3 +32,9 @@ open-media-folder = Open media folder...
 open-recent-media-folder = Open recent media folder
 close-media-folder = Close media folder
 quit = Quit
+
+# Controls
+
+repeat-disabled = Repeat disabled
+repeat-always = Repeat always
+repeat-once = Repeat once
