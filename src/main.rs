@@ -1332,6 +1332,12 @@ impl Application for App {
                     {
                         if let Some(video) = &mut self.video_opt {
                             self.has_media_repeated = true;
+
+                            // Workaround: Explicitly seeking to the start before `restart_stream`.
+                            // This prevents its internal `pause(false)` from triggering a second EndOfStream message
+                            // that breaks RepeatState::Once. This results in a double seek but avoids single repeat
+                            // not working at all. `restart_stream` is still required to set internal `is_eos` value.
+                            video.seek(0, false).expect("seek");
                             video.restart_stream().expect("restart_stream");
                         }
                     }
