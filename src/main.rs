@@ -1314,13 +1314,16 @@ impl Application for App {
                 }
             }
             Message::EndOfStream => {
+                let repeat_state = &self.flags.config_state.player_state.repeat;
                 println!(
                     "end of stream, repeat={:?}, has_media_repeated={:?}",
-                    self.flags.config_state.player_state.repeat, self.has_media_repeated
+                    repeat_state, self.has_media_repeated
                 );
 
-                match self.flags.config_state.player_state.repeat {
-                    RepeatState::Always | RepeatState::Once if !self.has_media_repeated => {
+                match repeat_state {
+                    RepeatState::Always | RepeatState::Once
+                        if (*repeat_state == RepeatState::Always || !self.has_media_repeated) =>
+                    {
                         if let Some(video) = &mut self.video_opt {
                             self.has_media_repeated = true;
                             video.restart_stream().expect("restart_stream");
