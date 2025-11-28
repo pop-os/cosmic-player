@@ -60,12 +60,10 @@ impl MprisState {
     }
 
     fn loop_status(&self) -> LoopStatus {
-        if self.will_repeat {
-            // TODO: Our choice is between Track and Playlist. Track is the best match for current repeat behavior,
-            // but this may change when we implement mpris playlists.
-            LoopStatus::Track
-        } else {
-            LoopStatus::None
+        match self.repeat_state {
+            RepeatState::Disabled => LoopStatus::None,
+            RepeatState::Playlist => LoopStatus::Playlist,
+            RepeatState::Track => LoopStatus::Track,
         }
     }
 }
@@ -210,11 +208,10 @@ impl PlayerInterface for Player {
 
     async fn set_loop_status(&self, loop_status: LoopStatus) -> Result<()> {
         log::info!("SetLoopStatus({})", loop_status);
-        let repeat_state = if loop_status == LoopStatus::None {
-            RepeatState::Disabled
-        } else {
-            // TODO: This may change when we implement mpris playlists.
-            RepeatState::Always
+        let repeat_state = match loop_status {
+            LoopStatus::None => RepeatState::Disabled,
+            LoopStatus::Playlist => RepeatState::Playlist,
+            LoopStatus::Track => RepeatState::Track,
         };
         self.message(Message::RepeatToggled(repeat_state)).await?;
         Ok(())

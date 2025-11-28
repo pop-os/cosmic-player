@@ -232,7 +232,7 @@ pub struct MprisState {
     position_micros: i64,
     paused: bool,
     volume: f64,
-    will_repeat: bool,
+    repeat_state: RepeatState,
 }
 
 #[derive(Clone, Debug)]
@@ -322,7 +322,6 @@ pub struct App {
     current_text: Option<i32>,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
-    has_media_repeated: bool,
 }
 
 impl App {
@@ -347,7 +346,6 @@ impl App {
         self.current_audio = -1;
         self.text_codes.clear();
         self.current_text = None;
-        self.has_media_repeated = false;
         self.update_mpris_meta();
         self.update_nav_bar_active();
         self.allow_idle();
@@ -379,7 +377,6 @@ impl App {
         };
 
         self.duration = video.duration().as_secs_f64();
-        self.has_media_repeated = false;
         let pipeline = video.pipeline();
         self.video_opt = Some(video);
 
@@ -743,15 +740,12 @@ impl App {
                 position_micros: (self.position * 1_000_000.0) as i64,
                 paused: true,
                 volume: 0.0,
-                will_repeat: false,
+                repeat_state: RepeatState::Disabled,
             };
             if let Some(video) = &self.video_opt {
                 new.paused = video.paused();
                 new.volume = video.volume();
-
-                let repeat_state = &self.flags.config_state.player_state.repeat;
-                new.will_repeat = *repeat_state == RepeatState::Always
-                    || (*repeat_state == RepeatState::Once && !self.has_media_repeated);
+                new.repeat_state = self.flags.config_state.player_state.repeat;
             }
             if new != *old {
                 *old = new.clone();
@@ -885,7 +879,6 @@ impl Application for App {
             current_text: None,
             #[cfg(feature = "xdg-portal")]
             inhibit,
-            has_media_repeated: false,
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1321,27 +1314,17 @@ impl Application for App {
             }
             Message::EndOfStream => {
                 let repeat_state = &self.flags.config_state.player_state.repeat;
-                println!(
-                    "end of stream, repeat={:?}, has_media_repeated={:?}",
-                    repeat_state, self.has_media_repeated
-                );
+                println!("end of stream, repeat={:?}", repeat_state);
 
-                match repeat_state {
-                    RepeatState::Always | RepeatState::Once
-                        if (*repeat_state == RepeatState::Always || !self.has_media_repeated) =>
-                    {
-                        if let Some(video) = &mut self.video_opt {
-                            self.has_media_repeated = true;
-
-                            // Workaround: Explicitly seeking to the start before `restart_stream`.
-                            // This prevents its internal `pause(false)` from triggering a second EndOfStream message
-                            // that breaks RepeatState::Once. This results in a double seek but avoids single repeat
-                            // not working at all. `restart_stream` is still required to set internal `is_eos` value.
-                            video.seek(0, false).expect("seek");
-                            video.restart_stream().expect("restart_stream");
-                        }
+                if matches!(repeat_state, RepeatState::Playlist | RepeatState::Track) {
+                    if let Some(video) = &mut self.video_opt {
+                        // Workaround: Explicitly seeking to the start before `restart_stream`.
+                        // This prevents its internal `pause(false)` from triggering a second EndOfStream message
+                        // that breaks RepeatState::Once. This results in a double seek but avoids single repeat
+                        // not working at all. `restart_stream` is still required to set internal `is_eos` value.
+                        video.seek(0, false).expect("seek");
+                        video.restart_stream().expect("restart_stream");
                     }
-                    _ => {}
                 }
             }
             Message::MissingPlugin(element) => {
@@ -1675,22 +1658,22 @@ impl Application for App {
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
                         RepeatState::Disabled => "media-playlist-no-repeat-symbolic",
-                        RepeatState::Always => "media-playlist-repeat-symbolic",
-                        RepeatState::Once => "media-playlist-repeat-song-symbolic",
+                        RepeatState::Playlist => "media-playlist-repeat-symbolic",
+                        RepeatState::Track => "media-playlist-repeat-song-symbolic",
                     })
                     .size(16),
                 )
                 .on_press(Message::RepeatToggled(
                     match self.flags.config_state.player_state.repeat {
-                        RepeatState::Disabled => RepeatState::Always,
-                        RepeatState::Always => RepeatState::Once,
-                        RepeatState::Once => RepeatState::Disabled,
+                        RepeatState::Disabled => RepeatState::Playlist,
+                        RepeatState::Playlist => RepeatState::Track,
+                        RepeatState::Track => RepeatState::Disabled,
                     },
                 )),
                 match self.flags.config_state.player_state.repeat {
                     RepeatState::Disabled => fl!("repeat-disabled"),
-                    RepeatState::Always => fl!("repeat-always"),
-                    RepeatState::Once => fl!("repeat-once"),
+                    RepeatState::Playlist => fl!("repeat-playlist"),
+                    RepeatState::Track => fl!("repeat-track"),
                 },
                 widget::tooltip::Position::Top,
             ));

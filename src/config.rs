@@ -40,11 +40,12 @@ impl Default for Config {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub enum RepeatState {
+    #[default]
     Disabled,
-    Once,
-    Always,
+    Track,
+    Playlist,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
