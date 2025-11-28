@@ -1316,7 +1316,7 @@ impl Application for App {
                 let repeat_state = &self.flags.config_state.player_state.repeat;
                 println!("end of stream, repeat={:?}", repeat_state);
 
-                if matches!(repeat_state, RepeatState::Playlist | RepeatState::Track) {
+                if matches!(repeat_state, RepeatState::Track) {
                     if let Some(video) = &mut self.video_opt {
                         // Workaround: Explicitly seeking to the start before `restart_stream`.
                         // This prevents its internal `pause(false)` from triggering a second EndOfStream message
@@ -1658,21 +1658,18 @@ impl Application for App {
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
                         RepeatState::Disabled => "media-playlist-no-repeat-symbolic",
-                        RepeatState::Playlist => "media-playlist-repeat-symbolic",
                         RepeatState::Track => "media-playlist-repeat-song-symbolic",
                     })
                     .size(16),
                 )
                 .on_press(Message::RepeatToggled(
                     match self.flags.config_state.player_state.repeat {
-                        RepeatState::Disabled => RepeatState::Playlist,
-                        RepeatState::Playlist => RepeatState::Track,
+                        RepeatState::Disabled => RepeatState::Track,
                         RepeatState::Track => RepeatState::Disabled,
                     },
                 )),
                 match self.flags.config_state.player_state.repeat {
                     RepeatState::Disabled => fl!("repeat-disabled"),
-                    RepeatState::Playlist => fl!("repeat-playlist"),
                     RepeatState::Track => fl!("repeat-track"),
                 },
                 widget::tooltip::Position::Top,

@@ -45,7 +45,6 @@ pub enum RepeatState {
     #[default]
     Disabled,
     Track,
-    Playlist,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

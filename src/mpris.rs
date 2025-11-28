@@ -62,7 +62,6 @@ impl MprisState {
     fn loop_status(&self) -> LoopStatus {
         match self.repeat_state {
             RepeatState::Disabled => LoopStatus::None,
-            RepeatState::Playlist => LoopStatus::Playlist,
             RepeatState::Track => LoopStatus::Track,
         }
     }
@@ -210,8 +209,7 @@ impl PlayerInterface for Player {
         log::info!("SetLoopStatus({})", loop_status);
         let repeat_state = match loop_status {
             LoopStatus::None => RepeatState::Disabled,
-            LoopStatus::Playlist => RepeatState::Playlist,
-            LoopStatus::Track => RepeatState::Track,
+            LoopStatus::Track | LoopStatus::Playlist => RepeatState::Track,
         };
         self.message(Message::RepeatToggled(repeat_state)).await?;
         Ok(())

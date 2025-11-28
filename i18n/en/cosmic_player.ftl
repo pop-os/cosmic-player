@@ -36,5 +36,4 @@ quit = Quit
 # Controls
 
 repeat-disabled = Repeat disabled
-repeat-playlist = Repeat playlist
 repeat-track = Repeat track
