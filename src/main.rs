@@ -431,6 +431,7 @@ impl App {
         }
 
         self.inhibit_idle();
+        self.set_looping_from_repeat_state();
         self.update_flags();
         self.update_mpris_meta();
         self.update_title()
@@ -818,6 +819,12 @@ impl App {
     fn inhibit_idle(&self) {
         #[cfg(feature = "xdg-portal")]
         let _ = self.inhibit.send(true);
+    }
+
+    fn set_looping_from_repeat_state(&mut self) {
+        if let Some(video) = &mut self.video_opt {
+            video.set_looping(self.flags.config_state.player_state.repeat == RepeatState::Track);
+        }
     }
 }
 
@@ -1228,6 +1235,7 @@ impl Application for App {
             }
             Message::RepeatToggled(state) => {
                 self.flags.config_state.player_state.repeat = state;
+                self.set_looping_from_repeat_state();
                 self.update_controls(true);
                 self.save_config_state();
             }
@@ -1313,19 +1321,10 @@ impl Application for App {
                 }
             }
             Message::EndOfStream => {
-                let repeat_state = &self.flags.config_state.player_state.repeat;
-                println!("end of stream, repeat={:?}", repeat_state);
-
-                if matches!(repeat_state, RepeatState::Track) {
-                    if let Some(video) = &mut self.video_opt {
-                        // Workaround: Explicitly seeking to the start before `restart_stream`.
-                        // This prevents its internal `pause(false)` from triggering a second EndOfStream message
-                        // that breaks RepeatState::Once. This results in a double seek but avoids single repeat
-                        // not working at all. `restart_stream` is still required to set internal `is_eos` value.
-                        video.seek(0, false).expect("seek");
-                        video.restart_stream().expect("restart_stream");
-                    }
-                }
+                println!(
+                    "end of stream, repeat={:?}",
+                    self.flags.config_state.player_state.repeat
+                );
             }
             Message::MissingPlugin(element) => {
                 if let Some(video) = &mut self.video_opt {
