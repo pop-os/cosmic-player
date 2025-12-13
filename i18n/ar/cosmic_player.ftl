@@ -17,7 +17,7 @@ settings = الإعدادات
 ### Appearance
 
 appearance = المظهر
-theme = الثيم
+theme = النسق
 match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
