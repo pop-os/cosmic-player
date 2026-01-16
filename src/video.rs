@@ -6,16 +6,23 @@ use iced_video_player::{
 
 use cosmic::app::{Command, message};
 
+#[derive(Debug, Default)]
+pub struct VideoSettings {
+    pub mute: bool,
+}
+
 pub fn new_video(
     url: &url::Url,
+    settings: VideoSettings,
 ) -> Result<Video, cosmic::Command<cosmic::app::Message<super::Message>>> {
     //TODO: this code came from iced_video_player::Video::new and has been modified to stop the pipeline on error
     //TODO: remove unwraps and enable playback of files with only audio.
     gst::init().unwrap();
 
     let pipeline = format!(
-        "playbin uri=\"{}\" video-sink=\"videoscale ! videoconvert ! videoflip method=automatic ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
-        url.as_str()
+        "playbin uri=\"{}\"{} video-sink=\"videoscale ! videoconvert ! videoflip method=automatic ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
+        url.as_str(),
+        if settings.mute { " mute=true" } else { "" }
     );
     let pipeline = gst::parse::launch(pipeline.as_ref())
         .unwrap()

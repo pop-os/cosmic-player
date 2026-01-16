@@ -369,7 +369,7 @@ impl App {
         self.flags.config_state.recent_files.truncate(10);
         self.save_config_state();
 
-        let video = match video::new_video(&url) {
+        let video = match video::new_video(&url, video::VideoSettings::default()) {
             Ok(ok) => ok,
             Err(err) => return err,
         };
