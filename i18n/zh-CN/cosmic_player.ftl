@@ -1,4 +1,4 @@
-album = 专辑: { $album }
+album = 专辑：{ $album }
 audio = 音频
 no-video-or-audio-file-open = 未打开视频或音频文件
 open-file = 打开文件
@@ -29,9 +29,11 @@ light = 亮色模式
 
 file = 文件
 open-media = 打开媒体文件...
-open-recent-media = 打开最近的媒体文件
+open-recent-media = 打开最近媒体文件
 close-file = 关闭文件
 open-media-folder = 打开媒体文件夹...
-open-recent-media-folder = 打开最近的媒体文件夹
+open-recent-media-folder = 打开最近媒体文件夹
 close-media-folder = 关闭媒体文件夹
 quit = 退出
+off = 已关闭
+clear-recent = 清空近期列表
