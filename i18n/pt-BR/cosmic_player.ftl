@@ -36,3 +36,4 @@ open-recent-media-folder = Abrir pasta recente de mídias
 close-media-folder = Fechar pasta de mídias
 quit = Sair
 off = Desligado
+clear-recent = Limpar a lista recente
