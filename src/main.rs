@@ -34,7 +34,7 @@ use std::{
 use tokio::sync::mpsc;
 
 use crate::{
-    config::{CONFIG_VERSION, Config, ConfigState},
+    config::{CONFIG_VERSION, Config, ConfigState, RepeatState},
     key_bind::{KeyBind, key_binds},
     project::ProjectNode,
 };
@@ -232,6 +232,7 @@ pub struct MprisState {
     position_micros: i64,
     paused: bool,
     volume: f64,
+    repeat_state: RepeatState,
 }
 
 #[derive(Clone, Debug)]
@@ -280,6 +281,7 @@ pub enum Message {
     Pause,
     Play,
     PlayPause,
+    RepeatToggled(RepeatState),
     Scrolled(ScrollDelta),
     Seek(f64),
     SeekRelative(f64),
@@ -429,6 +431,7 @@ impl App {
         }
 
         self.inhibit_idle();
+        self.set_looping_from_repeat_state();
         self.update_flags();
         self.update_mpris_meta();
         self.update_title()
@@ -738,10 +741,12 @@ impl App {
                 position_micros: (self.position * 1_000_000.0) as i64,
                 paused: true,
                 volume: 0.0,
+                repeat_state: RepeatState::Disabled,
             };
             if let Some(video) = &self.video_opt {
                 new.paused = video.paused();
                 new.volume = video.volume();
+                new.repeat_state = self.flags.config_state.player_state.repeat;
             }
             if new != *old {
                 *old = new.clone();
@@ -814,6 +819,12 @@ impl App {
     fn inhibit_idle(&self) {
         #[cfg(feature = "xdg-portal")]
         let _ = self.inhibit.send(true);
+    }
+
+    fn set_looping_from_repeat_state(&mut self) {
+        if let Some(video) = &mut self.video_opt {
+            video.set_looping(self.flags.config_state.player_state.repeat == RepeatState::Track);
+        }
     }
 }
 
@@ -1222,6 +1233,12 @@ impl Application for App {
                     }
                 }
             }
+            Message::RepeatToggled(state) => {
+                self.flags.config_state.player_state.repeat = state;
+                self.set_looping_from_repeat_state();
+                self.update_controls(true);
+                self.save_config_state();
+            }
             Message::Scrolled(delta) => {
                 let nav_bar_toggled = self.core.nav_bar_active();
                 if let Some(video) = &mut self.video_opt {
@@ -1304,7 +1321,10 @@ impl Application for App {
                 }
             }
             Message::EndOfStream => {
-                println!("end of stream");
+                println!(
+                    "end of stream, repeat={:?}",
+                    self.flags.config_state.player_state.repeat
+                );
             }
             Message::MissingPlugin(element) => {
                 if let Some(video) = &mut self.video_opt {
@@ -1620,7 +1640,7 @@ impl Application for App {
             );
         }
         if self.controls {
-            let mut row = widget::row::with_capacity(7)
+            let mut row = widget::row::with_capacity(8)
                 .align_items(Alignment::Center)
                 .spacing(space_xxs)
                 .push(
@@ -1633,6 +1653,26 @@ impl Application for App {
                     )
                     .on_press(Message::PlayPause),
                 );
+            row = row.push(widget::tooltip(
+                widget::button::icon(
+                    widget::icon::from_name(match self.flags.config_state.player_state.repeat {
+                        RepeatState::Disabled => "media-playlist-no-repeat-symbolic",
+                        RepeatState::Track => "media-playlist-repeat-song-symbolic",
+                    })
+                    .size(16),
+                )
+                .on_press(Message::RepeatToggled(
+                    match self.flags.config_state.player_state.repeat {
+                        RepeatState::Disabled => RepeatState::Track,
+                        RepeatState::Track => RepeatState::Disabled,
+                    },
+                )),
+                match self.flags.config_state.player_state.repeat {
+                    RepeatState::Disabled => fl!("repeat-disabled"),
+                    RepeatState::Track => fl!("repeat-track"),
+                },
+                widget::tooltip::Position::Top,
+            ));
             if self.core.is_condensed() {
                 row = row.push(widget::horizontal_space(Length::Fill));
             } else {
