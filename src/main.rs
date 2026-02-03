@@ -1185,6 +1185,7 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     if volume >= 0.0 && volume <= 1.0 {
                         video.set_volume(volume);
+                        video.set_muted(false);
                         self.update_controls(true);
                     }
                 }
@@ -1265,6 +1266,7 @@ impl Application for App {
 
                     if (volume >= 0.0 && volume <= 1.0) && !nav_bar_toggled {
                         video.set_volume(volume);
+                        video.set_muted(false);
                         self.update_controls(true);
                     }
                 }
@@ -1550,7 +1552,6 @@ impl Application for App {
                             )
                             .on_press(Message::AudioToggle)
                             .into(),
-                            //TODO: disable slider when muted?
                             Slider::new(0.0..=1.0, volume, Message::AudioVolume)
                                 .step(0.01)
                                 .into(),
