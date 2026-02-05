@@ -2,25 +2,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    Application, ApplicationExt, Element,
-    app::{Command, Core, Settings, command, message},
+    app::{command, message, Command, Core, Settings},
     cosmic_config::{self, CosmicConfigEntry},
     cosmic_theme, executor, font,
     iced::{
-        Alignment, Background, Border, Color, ContentFit, Length, Limits,
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::{Event as MouseEvent, ScrollDelta},
         subscription::Subscription,
-        window,
+        window, Alignment, Background, Border, Color, ContentFit, Length, Limits,
     },
     iced_style, theme,
-    widget::{self, Slider, menu::action::MenuAction, nav_bar, segmented_button},
+    widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
+    Application, ApplicationExt, Element,
 };
 use iced_video_player::{
-    Video, VideoPlayer,
     gst::{self, prelude::*},
-    gst_pbutils,
+    gst_pbutils, Video, VideoPlayer,
 };
 use std::{
     any::TypeId,
@@ -34,8 +32,8 @@ use std::{
 use tokio::sync::mpsc;
 
 use crate::{
-    config::{CONFIG_VERSION, Config, ConfigState},
-    key_bind::{KeyBind, key_binds},
+    config::{Config, ConfigState, CONFIG_VERSION},
+    key_bind::{key_binds, KeyBind},
     project::ProjectNode,
 };
 
@@ -284,6 +282,7 @@ pub enum Message {
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
+    PlayNext,
     EndOfStream,
     MissingPlugin(gst::Message),
     MprisChannel(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>),
@@ -897,7 +896,8 @@ impl Application for App {
         let command = match (app.flags.urls.take(), maybe_path) {
             (Some(urls), _) => command::message::app(Message::MultipleLoad(urls)),
             (None, Some(path)) if path.is_dir() => command::message::app(Message::FolderLoad(path)),
-            _ => app.load(),
+            _ => app.load(), //If there is no url args, we execute load for nothing?
+                             //If only one file is loaded, nothing is added to the navbar.
         };
         (app, command)
     }
@@ -918,9 +918,7 @@ impl Application for App {
         // Toggle open state and get clone of node data
         let node_opt = match self.nav_model.data_mut::<ProjectNode>(id) {
             Some(node) => {
-                if let ProjectNode::Folder { open, .. } = node {
-                    *open = !*open;
-                }
+                node.flip_open();
                 Some(node.clone())
             }
             None => None,
@@ -1303,9 +1301,58 @@ impl Application for App {
                     self.update_controls(true);
                 }
             }
+
+            Message::PlayNext => {
+                // TODO: known limitations:
+                // 1) if the user collapses the folder entry while a song is playing,
+                //    the player will stop at the end of the stream because the current ID may become `Entity(null)`.
+                //
+                // 2) ProjectNode::File does not restrict file types to those supported by GStreamer.
+                //    Therefore, if a non-playable file (e.g., a .jpg) is encountered in a folder, it will trigger a
+                //    "failed to open file" error and halt the stream.
+                //
+                // 3) if we play the last song of a folder and the next one is already expanded by
+                //    user (or because it was played before), the player will collapse it and jump
+                //    to the next file/folder after it.
+
+                //first we get info about current media id & position in nav_bar
+                let curr_id = self.nav_model.active();
+                let curr_position = match self.nav_model.position(curr_id) {
+                    Some(pos) => pos,
+                    None => {
+                        log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        return self.update(Message::EndOfStream);
+                    }
+                };
+
+                //Then we activate the next one in the nav bar and ask to load it
+                if self.nav_model.activate_position(curr_position + 1) {
+                    let curr_id = self.nav_model.active();
+                    match self.nav_model.data::<ProjectNode>(curr_id) {
+                        //The next one is a media file, we play it.
+                        Some(ProjectNode::File { .. }) => return self.on_nav_select(curr_id),
+
+                        //The next one is a folder. We expand it and recall PlayNext.
+                        Some(ProjectNode::Folder { .. }) => {
+                            let _ = self.on_nav_select(curr_id);
+                            return self.update(Message::PlayNext);
+                        }
+
+                        //Unknown type. We do nothing.
+                        _ => log::warn!(
+                            "unknown type: {:?}",
+                            self.nav_model.data::<ProjectNode>(curr_id)
+                        ),
+                    }
+                } else {
+                    return self.update(Message::EndOfStream);
+                }
+            }
+
             Message::EndOfStream => {
                 println!("end of stream");
             }
+
             Message::MissingPlugin(element) => {
                 if let Some(video) = &mut self.video_opt {
                     video.set_paused(true);
@@ -1454,7 +1501,7 @@ impl Application for App {
         let mut video_player: Element<_> = VideoPlayer::new(video)
             .mouse_hidden(!self.controls)
             .on_duration_changed(Message::DurationChanged)
-            .on_end_of_stream(Message::EndOfStream)
+            .on_end_of_stream(Message::PlayNext)
             .on_missing_plugin(Message::MissingPlugin)
             .on_new_frame(Message::NewFrame)
             .width(Length::Fill)
