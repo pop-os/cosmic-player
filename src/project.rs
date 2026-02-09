@@ -70,6 +70,12 @@ impl ProjectNode {
             Self::File { name, .. } => name,
         }
     }
+
+    pub fn flip_open(&mut self) {
+        if let Self::Folder { open, .. } = self {
+            *open = !*open;
+        }
+    }
 }
 
 impl Ord for ProjectNode {
