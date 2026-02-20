@@ -368,77 +368,80 @@ impl PlaylistsInterface for Player {
 */
 
 fn watcher_stream() -> impl Stream<Item = Message> {
-    stream::channel(5, move |mut msg_tx| async move {
-        let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-        let meta = MprisMeta::default();
-        let state = MprisState::default();
-        msg_tx
-            .send(Message::MprisChannel(meta.clone(), state.clone(), event_tx))
+    stream::channel(
+        5,
+        move |mut msg_tx: futures::channel::mpsc::Sender<Message>| async move {
+            let (event_tx, mut event_rx) = mpsc::unbounded_channel();
+            let meta: MprisMeta = MprisMeta::default();
+            let state: MprisState = MprisState::default();
+            msg_tx
+                .send(Message::MprisChannel(meta.clone(), state.clone(), event_tx))
+                .await
+                .unwrap();
+            match Server::new(
+                &format!("org.mpris.MediaPlayer2.cosmic-player.pid{}", process::id()),
+                Player {
+                    msg_tx: Mutex::new(msg_tx),
+                    meta: Mutex::new(meta),
+                    state: Mutex::new(state),
+                },
+            )
             .await
-            .unwrap();
-        match Server::new(
-            &format!("org.mpris.MediaPlayer2.cosmic-player.pid{}", process::id()),
-            Player {
-                msg_tx: Mutex::new(msg_tx),
-                meta: Mutex::new(meta),
-                state: Mutex::new(state),
-            },
-        )
-        .await
-        {
-            Ok(server) => {
-                log::info!("running mpris server");
-                while let Some(event) = event_rx.recv().await {
-                    let mut props = Vec::new();
-                    let mut sigs = Vec::new();
-                    match event {
-                        MprisEvent::Meta(new) => {
-                            let mut old = server.imp().meta.lock().await;
-                            let new_metadata = new.metadata();
-                            if new_metadata != old.metadata() {
-                                props.push(Property::Metadata(new_metadata));
+            {
+                Ok(server) => {
+                    log::info!("running mpris server");
+                    while let Some(event) = event_rx.recv().await {
+                        let mut props = Vec::new();
+                        let mut sigs = Vec::new();
+                        match event {
+                            MprisEvent::Meta(new) => {
+                                let mut old = server.imp().meta.lock().await;
+                                let new_metadata = new.metadata();
+                                if new_metadata != old.metadata() {
+                                    props.push(Property::Metadata(new_metadata));
+                                }
+                                *old = new;
                             }
-                            *old = new;
+                            MprisEvent::State(new) => {
+                                let mut old = server.imp().state.lock().await;
+                                if new.fullscreen != old.fullscreen {
+                                    props.push(Property::Fullscreen(new.fullscreen));
+                                }
+                                let new_playback_status = new.playback_status();
+                                if new_playback_status != old.playback_status() {
+                                    props.push(Property::PlaybackStatus(new_playback_status));
+                                }
+                                if new.volume != old.volume {
+                                    props.push(Property::Volume(new.volume));
+                                }
+                                if new.position_micros != old.position_micros {
+                                    sigs.push(Signal::Seeked {
+                                        position: Time::from_micros(new.position_micros),
+                                    });
+                                }
+                                *old = new;
+                            }
                         }
-                        MprisEvent::State(new) => {
-                            let mut old = server.imp().state.lock().await;
-                            if new.fullscreen != old.fullscreen {
-                                props.push(Property::Fullscreen(new.fullscreen));
-                            }
-                            let new_playback_status = new.playback_status();
-                            if new_playback_status != old.playback_status() {
-                                props.push(Property::PlaybackStatus(new_playback_status));
-                            }
-                            if new.volume != old.volume {
-                                props.push(Property::Volume(new.volume));
-                            }
-                            if new.position_micros != old.position_micros {
-                                sigs.push(Signal::Seeked {
-                                    position: Time::from_micros(new.position_micros),
-                                });
-                            }
-                            *old = new;
+                        if !props.is_empty() {
+                            let _ = server.properties_changed(props).await;
+                        }
+                        for sig in sigs {
+                            let _ = server.emit(sig).await;
                         }
                     }
-                    if !props.is_empty() {
-                        let _ = server.properties_changed(props).await;
-                    }
-                    for sig in sigs {
-                        let _ = server.emit(sig).await;
-                    }
+                    future::pending().await
                 }
-                future::pending().await
+                Err(err) => {
+                    log::warn!("failed to start mpris server: {err}");
+                    future::pending().await
+                }
             }
-            Err(err) => {
-                log::warn!("failed to start mpris server: {err}");
-                future::pending().await
-            }
-        }
-    })
+        },
+    )
 }
 
 #[cold]
 pub fn subscription() -> Subscription<Message> {
     struct MprisSubscription;
-    Subscription::run_with_id(TypeId::of::<MprisSubscription>(), watcher_stream())
+    Subscription::run_with(TypeId::of::<MprisSubscription>(), |_| watcher_stream())
 }

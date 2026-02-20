@@ -11,7 +11,8 @@ use cosmic::{
         event::{self, Event},
         keyboard::{Event as KeyEvent, Key, Modifiers},
         mouse::{Event as MouseEvent, ScrollDelta},
-        window, Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
+        window::{self, set_mode},
+        Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
     },
     theme,
     widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
@@ -27,7 +28,12 @@ use std::{
     ffi::{CStr, CString},
     fs,
     path::{Path, PathBuf},
-    process, thread,
+    process,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread,
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
@@ -92,15 +98,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    #[cfg(all(unix, not(target_os = "redox")))]
-    match fork::daemon(true, true) {
-        Ok(fork::Fork::Child) => (),
-        Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
-        Err(err) => {
-            eprintln!("failed to daemonize: {:?}", err);
-            process::exit(1);
-        }
-    }
+    // #[cfg(all(unix, not(target_os = "redox")))]
+    // match fork::daemon(true, true) {
+    //     Ok(fork::Fork::Child) => (),
+    //     Ok(fork::Fork::Parent(_child_pid)) => process::exit(0),
+    //     Err(err) => {
+    //         eprintln!("failed to daemonize: {:?}", err);
+    //         process::exit(1);
+    //     }
+    // }
 
     localize::localize();
 
@@ -355,6 +361,7 @@ impl App {
             Some(some) => some.clone(),
             None => return Task::none(),
         };
+        dbg!("loading file", &url);
 
         log::info!("Loading {}", url);
 
@@ -399,7 +406,6 @@ impl App {
                 .unwrap();
             let video_sink = bin.by_name("iced_video").unwrap();
             let video_sink = video_sink.downcast::<gst_app::AppSink>().unwrap();
-
             match Video::from_gst_pipeline(pipeline.clone(), video_sink, None) {
                 Ok(ok) => ok,
                 Err(err) => {
@@ -1187,7 +1193,7 @@ impl Application for App {
                 if let Some(window_id) = self.core.main_window_id() {
                     self.fullscreen = !self.fullscreen;
                     self.core.window.show_headerbar = !self.fullscreen;
-                    return window::change_mode(
+                    return set_mode(
                         window_id,
                         if self.fullscreen {
                             window::Mode::Fullscreen
@@ -1462,7 +1468,7 @@ impl Application for App {
                 .spacing(24)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .push(widget::vertical_space())
+                .push(widget::space::vertical())
                 .push(
                     widget::column::with_capacity(2)
                         .align_x(Alignment::Center)
@@ -1471,7 +1477,7 @@ impl Application for App {
                         .push(widget::text::body(fl!("no-video-or-audio-file-open"))),
                 )
                 .push(widget::button::suggested(fl!("open-file")).on_press(Message::FileOpen))
-                .push(widget::vertical_space());
+                .push(widget::space::vertical());
 
             return widget::container(column)
                 .width(Length::Fill)
@@ -1488,9 +1494,10 @@ impl Application for App {
             .on_duration_changed(Message::DurationChanged)
             .on_end_of_stream(Message::EndOfStream)
             .on_missing_plugin(Message::MissingPlugin)
-            .on_new_frame(Message::NewFrame)
+            // .on_new_frame(Message::NewFrame)
             .width(Length::Fill)
             .height(Length::Fill)
+            .id(cosmic::widget::Id::new("video-player".to_string()))
             .into();
 
         let mut background_color = Color::BLACK;
@@ -1500,7 +1507,7 @@ impl Application for App {
             text_color_opt = Some(Color::from(theme.cosmic().on_bg_component_color()));
 
             let mut col = widget::column();
-            col = col.push(widget::vertical_space());
+            col = col.push(widget::space::vertical());
             if let Some(album_art) = &self.album_art_opt {
                 col = col.push(
                     widget::image(widget::image::Handle::from_path(album_art.path()))
@@ -1510,7 +1517,7 @@ impl Application for App {
             } else {
                 col = col.push(widget::icon::from_name("audio-x-generic-symbolic").size(256));
             }
-            col = col.push(widget::vertical_space().height(space_s));
+            col = col.push(widget::space::vertical().height(space_s));
             if self.mpris_meta.title.is_empty() {
                 col = col.push(widget::text::title4(fl!("untitled")));
             } else {
@@ -1523,7 +1530,7 @@ impl Application for App {
                     col = col.push(widget::text::body(artist));
                 }
             }
-            col = col.push(widget::vertical_space().height(space_s));
+            col = col.push(widget::space::vertical().height(space_s));
             if !self.mpris_meta.album.is_empty() {
                 col = col.push(widget::text::body(fl!(
                     "album",
@@ -1533,7 +1540,7 @@ impl Application for App {
             if let Some(year) = &self.mpris_meta.album_year_opt {
                 col = col.push(widget::text::body(format!("{}", year)));
             }
-            col = col.push(widget::vertical_space());
+            col = col.push(widget::space::vertical());
 
             // Space to keep from going under control overlay
             let mut control_height = space_xxs + 32 + space_xxs;
@@ -1543,11 +1550,11 @@ impl Application for App {
 
             // This is a hack to have the video player running but not visible (since the controls will cover it as an overlay)
             video_player = widget::row::with_children(vec![
-                widget::horizontal_space().into(),
+                widget::space::horizontal().into(),
                 widget::container(col.push(widget::container(video_player).height(control_height)))
                     .width(320)
                     .into(),
-                widget::horizontal_space().into(),
+                widget::space::horizontal().into(),
             ])
             .into();
         }
@@ -1626,7 +1633,7 @@ impl Application for App {
 
             popup_items.push(
                 widget::row::with_children(vec![
-                    widget::horizontal_space().into(),
+                    widget::space::horizontal().into(),
                     widget::container(column)
                         .padding(1)
                         //TODO: move style to libcosmic
@@ -1666,7 +1673,7 @@ impl Application for App {
                     .on_press(Message::PlayPause),
                 );
             if self.core.is_condensed() {
-                row = row.push(widget::horizontal_space());
+                row = row.push(widget::space::horizontal());
             } else {
                 row = row
                     .push(widget::text(format_time(self.position)).font(font::mono()))
@@ -1770,7 +1777,7 @@ impl Application for App {
                 Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
                     Some(Message::Key(modifiers, key))
                 }
-                Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
+                // Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
                 Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Scrolled(delta)),
                 _ => None,
             }),
@@ -1809,10 +1816,10 @@ impl Application for App {
             }),
         ];
 
-        #[cfg(feature = "mpris-server")]
-        {
-            subscriptions.push(mpris::subscription());
-        }
+        // #[cfg(feature = "mpris-server")]
+        // {
+        //     subscriptions.push(mpris::subscription());
+        // }
 
         Subscription::batch(subscriptions)
     }
