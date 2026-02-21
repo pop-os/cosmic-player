@@ -40,10 +40,23 @@ impl Default for Config {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub enum RepeatState {
+    #[default]
+    Disabled,
+    Track,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PlayerState {
+    pub repeat: RepeatState,
+}
+
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConfigState {
     pub recent_files: VecDeque<url::Url>,
     pub recent_projects: VecDeque<PathBuf>,
+    pub player_state: PlayerState,
 }
 
 impl Default for ConfigState {
@@ -51,6 +64,9 @@ impl Default for ConfigState {
         Self {
             recent_files: VecDeque::new(),
             recent_projects: VecDeque::new(),
+            player_state: PlayerState {
+                repeat: RepeatState::Disabled,
+            },
         }
     }
 }
