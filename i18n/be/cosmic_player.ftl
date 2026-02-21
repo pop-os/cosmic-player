@@ -21,3 +21,4 @@ close-media-folder = Закрыць медыя папку
 quit = Выйсці
 off = Выкл.
 match-desktop = Як у сістэме
+clear-recent = Ачысціць спіс нядаўніх

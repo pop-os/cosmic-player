@@ -1,6 +1,6 @@
 [package]
 name = "cosmic-player"
-version = "0.1.0"
+version = "1.0.7"
 edition = "2024"
 
 [build-dependencies]
@@ -55,6 +55,11 @@ wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 [profile.release-with-debug]
 inherits = "release"
 debug = true
+
+# Keep cosmic-text at version compatible with prev-master of libcosmic
+[patch.'https://github.com/pop-os/cosmic-text'.cosmic-text]
+git = "https://github.com/pop-os/cosmic-text//"
+rev = "166b59f560c551dab391a864f7c1f503c1e18446"
 
 # [patch.'https://github.com/jackpot51/iced_video_player']
 # iced_video_player = { path = "../../iced_video_player" }

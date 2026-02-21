@@ -81,7 +81,6 @@ pub fn parse() -> Arguments {
     if urls.len() > 1 {
         arguments.urls = Some(urls);
     } else {
-        urls.truncate(1);
         arguments.url_opt = urls.pop();
     }
 
