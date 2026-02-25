@@ -46,3 +46,9 @@ ab-repeat = Repetir A-B
 ab-repeat-set-a = Repetir A-B (A)
 ab-repeat-set-b = Repetir A-B (B)
 ab-repeat-clear = Limpar repetição A-B
+
+# XDG Metadata
+
+xdg-name = Reprodutor de Mídia
+xdg-comment = Reprodutor de mídia do desktop COSMIC
+xdg-keywords = Audio;Filme;Música;Som;Vídeo;Media;Player;

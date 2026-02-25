@@ -46,3 +46,9 @@ ab-repeat = A-B-upprepning
 ab-repeat-set-a = A-B-upprepning (A)
 ab-repeat-set-b = A-B-upprepning (B)
 ab-repeat-clear = Rensa A-B-upprepning
+
+# XDG Metadata
+
+xdg-name = COSMIC Mediaspelare
+xdg-comment = Mediaspelare för skrivbordsmiljön COSMIC
+xdg-keywords = Ljud;Film;Musik;Video;Media;

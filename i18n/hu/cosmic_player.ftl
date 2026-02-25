@@ -46,3 +46,9 @@ ab-repeat = A–B ismétlés
 ab-repeat-set-a = A–B ismétlés (A)
 ab-repeat-set-b = A–B ismétlés (B)
 ab-repeat-clear = A–B ismétlés törlése
+
+# XDG Metadata
+
+xdg-name = COSMIC Médialejátszó
+xdg-comment = Médialejátszó a COSMIC asztali környezethez
+xdg-keywords = hang;film;zene;videó;média;lejátszó;

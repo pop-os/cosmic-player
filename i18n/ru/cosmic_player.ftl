@@ -39,3 +39,8 @@ ab-repeat = Повтор A–B
 ab-repeat-set-a = Повтор A–B (уст. A)
 ab-repeat-set-b = Повтор A–B (уст. B)
 ab-repeat-clear = Повтор A–B (очистить)
+
+# XDG Metadata
+
+xdg-name = Медиаплеер
+xdg-keywords = Аудио;Фильм;Музыка;Видео;Медиа;Звук;Мультимедиа;Медиаплеер;

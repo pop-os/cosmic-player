@@ -45,3 +45,9 @@ ab-repeat = A-B Repeat
 ab-repeat-set-a = A-B Repeat (A)
 ab-repeat-set-b = A-B Repeat (B)
 ab-repeat-clear = Clear A-B Repeat
+
+# XDG Metadata
+
+xdg-name = COSMIC Media Player
+xdg-comment = Media player for the COSMIC desktop
+xdg-keywords = Audio;Film;Movie;Music;Sound;Video;

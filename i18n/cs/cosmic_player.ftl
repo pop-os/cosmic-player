@@ -31,3 +31,9 @@ ab-repeat = Opakování A-B
 ab-repeat-set-a = Opakování A-B (A)
 ab-repeat-set-b = Opakování A-B (B)
 ab-repeat-clear = Vymazat opakování A-B
+
+# XDG Metadata
+
+xdg-name = Přehrávač médií COSMIC
+xdg-comment = Přehrávač médií pro pracovní prostředí COSMIC
+xdg-keywords = audio;film;hudba;video;média;zvuk;
