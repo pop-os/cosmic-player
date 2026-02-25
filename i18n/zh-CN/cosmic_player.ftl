@@ -46,3 +46,7 @@ ab-repeat = A-B 重复
 ab-repeat-set-a = A-B 重复（A）
 ab-repeat-set-b = A-B 重复（B）
 ab-repeat-clear = 清除 A-B 重复
+
+# XDG Metadata
+
+xdg-name = COSMIC 媒体播放器

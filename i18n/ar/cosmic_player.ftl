@@ -46,3 +46,9 @@ ab-repeat = تكرار A-B
 ab-repeat-set-a = تكرار A-B (A)
 ab-repeat-set-b = تكرار A-B (B)
 ab-repeat-clear = امحُ تكرار A-B
+
+# XDG Metadata
+
+xdg-name = مشغّل وسائط COSMIC
+xdg-comment = مشغّل وسائط لسطح مكتب COSMIC
+xdg-keywords = فيلم;مقطع;فيديو;صوت

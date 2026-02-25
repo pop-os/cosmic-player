@@ -46,3 +46,9 @@ ab-repeat-set-a = A-B Powtarzanie (A)
 ab-repeat-set-b = A-B Powtarzanie (B)
 ab-repeat-clear = Wyczyść Powtarzanie A-B
 previous-frame = Poprzednia Klatka
+
+# XDG Metadata
+
+xdg-name = Odtwarzacz Multimediów COSMIC
+xdg-comment = Odtwarzacz Multimediów dla środowiska graficznego COSMIC
+xdg-keywords = Audio;Dźwięki;Filmy;Muzyka;Vídeo;Media;Odtwarzacz;Multimedia;
