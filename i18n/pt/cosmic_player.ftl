@@ -35,3 +35,9 @@ open-media-folder = Abrir pasta de multimédias...
 open-recent-media-folder = Abrir pasta recente de multimédias
 close-media-folder = Fechar pasta de multimédia
 quit = Sair
+
+# XDG Metadata
+
+xdg-name = Reprodutor de Mídia
+xdg-comment = Reprodutor de mídia do desktop COSMIC
+xdg-keywords = Audio;Filme;Música;Som;Vídeo;Media;Player;

@@ -37,3 +37,9 @@ close-media-folder = Zamknij katalog z nośnikami
 quit = Zamknij
 off = Wyłączone
 clear-recent = Wyczyść listę poprzednich
+
+# XDG Metadata
+
+xdg-name = Odtwarzacz Multimediów COSMIC
+xdg-comment = Odtwarzacz Multimediów dla środowiska graficznego COSMIC
+xdg-keywords = Audio;Dźwięki;Filmy;Muzyka;Vídeo;Media;Odtwarzacz;Multimedia;

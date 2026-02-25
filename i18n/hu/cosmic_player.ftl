@@ -37,3 +37,9 @@ close-media-folder = Médiamappa bezárása
 quit = Kilépés
 off = Ki
 clear-recent = Legutóbbiak listájának törlése
+
+# XDG Metadata
+
+xdg-name = COSMIC Médialejátszó
+xdg-comment = Médialejátszó a COSMIC asztali környezethez
+xdg-keywords = hang;film;zene;videó;média;lejátszó;

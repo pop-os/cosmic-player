@@ -37,3 +37,9 @@ close-media-folder = Stäng mediamappen
 quit = Avsluta
 off = Av
 clear-recent = Töm senaste-listan
+
+# XDG Metadata
+
+xdg-name = COSMIC Mediaspelare
+xdg-comment = Mediaspelare för skrivbordsmiljön COSMIC
+xdg-keywords = Ljud;Film;Musik;Video;Media;

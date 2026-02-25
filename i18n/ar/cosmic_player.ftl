@@ -37,3 +37,9 @@ close-media-folder = أغلِق مجلد الوسائط
 quit = أنهِ
 off = معطّل
 clear-recent = امحُ القائمة الحديثة
+
+# XDG Metadata
+
+xdg-name = مشغّل وسائط COSMIC
+xdg-comment = مشغّل وسائط لسطح مكتب COSMIC
+xdg-keywords = فيلم;مقطع;فيديو;صوت
