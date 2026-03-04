@@ -27,6 +27,9 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([], Key::Named(Named::Space), PlayPause);
     bind!([], Key::Named(Named::ArrowLeft), SeekBackward);
     bind!([], Key::Named(Named::ArrowRight), SeekForward);
+    bind!([], Key::Character(".".into()), NextFrame);
+    bind!([], Key::Character(",".into()), PreviousFrame);
+    bind!([], Key::Character("a".into()), AbRepeat);
 
     key_binds
 }
