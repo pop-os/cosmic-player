@@ -143,7 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     settings = settings.theme(config.app_theme.theme());
     settings = settings.size_limits(Limits::NONE.min_width(360.0).min_height(180.0));
 
-   
+
     let flags = Flags {
         config,
         config_state_handler,
@@ -1333,6 +1333,12 @@ impl Application for App {
                 // 3) if we play the last song of a folder and the next one is already expanded by
                 //    user (or because it was played before), the player will collapse it and jump
                 //    to the next file/folder after it.
+
+                if self.flags.config_state.player_state.repeat == RepeatState::Track {
+                    // we hook Message::PlayNext to the EOS signal. iced_video_player always emits EOS regardless of
+                    // looping state, so do nothing if repeat is set.
+                    return Command::none();
+                }
 
                 //first we get info about current media id & position in nav_bar
                 let curr_id = self.nav_model.active();
