@@ -98,7 +98,7 @@ pub fn menu_bar<'a>(
             ),
         ),
         menu::Tree::with_children(
-            menu::root(fl!("options")),
+            menu::root(fl!("playback")),
             menu::items(
                 key_binds,
                 vec![
