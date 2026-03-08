@@ -37,3 +37,5 @@ close-media-folder = أغلِق مجلد الوسائط
 quit = أنهِ
 off = معطّل
 clear-recent = امحُ القائمة الحديثة
+repeat-disabled = التكرار مُعطَّل
+repeat-track = كرِّر المقطع

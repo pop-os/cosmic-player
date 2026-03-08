@@ -22,3 +22,5 @@ open-media-folder = Buka map media...
 open-recent-media-folder = Buka map media terbaru
 close-media-folder = Tutup map media
 clear-recent = Hapus daftar terbaru
+repeat-track = Ulangi trek
+repeat-disabled = Pengulangan dinonaktifkan

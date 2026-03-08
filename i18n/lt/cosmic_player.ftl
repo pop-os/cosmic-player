@@ -20,3 +20,7 @@ clear-recent = Išvalyti neseniai peržiūrėtų sąrašą
 open-media-folder = Atidaryti audiovizualų aplanką...
 open-recent-media-folder = Atidaryti neseniai peržiūrėtą audiovizualų aplanką
 close-media-folder = Užverti audiovizualų aplanką
+dark = Tamsus
+light = Šviesus
+repeat-track = Kartoti takelį
+repeat-disabled = Kartojimas išjungtas

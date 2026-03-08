@@ -37,3 +37,5 @@ close-media-folder = Médiamappa bezárása
 quit = Kilépés
 off = Ki
 clear-recent = Legutóbbiak listájának törlése
+repeat-disabled = Ismétlés letiltva
+repeat-track = Szám ismétlése

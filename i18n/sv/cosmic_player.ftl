@@ -37,3 +37,5 @@ close-media-folder = Stäng mediamappen
 quit = Avsluta
 off = Av
 clear-recent = Töm senaste-listan
+repeat-disabled = Upprepning avaktiverad
+repeat-track = Upprepa spår

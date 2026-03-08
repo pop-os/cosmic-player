@@ -36,3 +36,5 @@ open-recent-media-folder = Ordner der zuletzt verwendeten Medien öffnen
 close-media-folder = Medienordner schließen
 quit = Beenden
 off = Aus
+repeat-disabled = Wiederholung deaktiviert
+repeat-track = Titel wiederholen
