@@ -22,3 +22,5 @@ close-media-folder = Zavřít složku s médii
 quit = Ukončit
 off = Vypnuto
 clear-recent = Vymazat seznam nedávných
+repeat-track = Opakovat skladbu
+repeat-disabled = Opakování zakázáno

@@ -16,7 +16,7 @@ settings = Socruithe
 
 ### Appearance
 
-appearance = Cuma
+appearance = Dealramh
 theme = Téama
 match-desktop = Meaitseáil deasc
 dark = Dorcha
@@ -37,3 +37,5 @@ close-media-folder = Dún an fillteán meán
 quit = Scoir
 off = As
 clear-recent = Glan an liosta le déanaí
+repeat-disabled = Athsheinm múchta
+repeat-track = Athsheinm an riain

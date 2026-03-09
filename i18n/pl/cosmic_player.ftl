@@ -37,3 +37,5 @@ close-media-folder = Zamknij katalog z nośnikami
 quit = Zamknij
 off = Wyłączone
 clear-recent = Wyczyść listę poprzednich
+repeat-disabled = Powtarzanie wyłączone
+repeat-track = Powtórz utwór
