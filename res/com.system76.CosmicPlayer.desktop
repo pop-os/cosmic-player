@@ -1,5 +1,6 @@
 [Desktop Entry]
 Name=COSMIC Media Player
+Comment=Media player for the COSMIC desktop
 Exec=cosmic-player %U
 Terminal=false
 Type=Application
