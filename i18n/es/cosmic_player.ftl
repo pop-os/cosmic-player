@@ -36,3 +36,9 @@ open-recent-media-folder = Abrir carpetas multimedia recientes
 close-media-folder = Cerrar carpeta multimedia
 quit = Salir
 off = Apagado
+
+# XDG Metadata
+
+xdg-name = Reproductor de medios COSMIC
+xdg-comment = Reproductor de medios para el escritorio COSMIC
+xdg-keywords = Audio;Película;Música;Vídeo;Sonido;Reproductor;

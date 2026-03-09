@@ -37,3 +37,7 @@ close-media-folder = 关闭媒体文件夹
 quit = 退出
 off = 已关闭
 clear-recent = 清空近期列表
+
+# XDG Metadata
+
+xdg-name = COSMIC 媒体播放器

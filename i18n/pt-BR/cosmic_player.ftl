@@ -37,3 +37,9 @@ close-media-folder = Fechar pasta de mídias
 quit = Sair
 off = Desligado
 clear-recent = Limpar a lista recente
+
+# XDG Metadata
+
+xdg-name = Reprodutor de Mídia
+xdg-comment = Reprodutor de mídia do desktop COSMIC
+xdg-keywords = Audio;Filme;Música;Som;Vídeo;Media;Player;

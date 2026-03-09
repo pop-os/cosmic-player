@@ -22,3 +22,9 @@ close-media-folder = Zavřít složku s médii
 quit = Ukončit
 off = Vypnuto
 clear-recent = Vymazat seznam nedávných
+
+# XDG Metadata
+
+xdg-name = Přehrávač médií COSMIC
+xdg-comment = Přehrávač médií pro pracovní prostředí COSMIC
+xdg-keywords = audio;film;hudba;video;média;zvuk;

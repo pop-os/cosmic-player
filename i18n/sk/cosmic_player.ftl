@@ -30,3 +30,9 @@ open-media-folder = Otvoriť priečinok s médiami...
 open-recent-media-folder = Otvoriť posledný priečinok s médiami
 close-media-folder = Zatvoriť priečinok s médiami
 quit = Ukončiť
+
+# XDG Metadata
+
+xdg-name = Prehrávač Médií COSMIC
+xdg-comment = Prehrávač médií pre pracovné prostredie COSMIC
+xdg-keywords = audio;film;hudba;video;prehrávač;média;zvuk;

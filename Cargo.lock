@@ -1091,6 +1091,7 @@ dependencies = [
  "tokio",
  "url",
  "vergen",
+ "xdgen",
 ]
 
 [[package]]
@@ -1671,7 +1672,17 @@ version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb74634707bebd0ce645a981148e8fb8c7bccd4c33c652aeffd28bf2f96d555a"
 dependencies = [
- "fluent-bundle",
+ "fluent-bundle 0.15.3",
+ "unic-langid",
+]
+
+[[package]]
+name = "fluent"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8137a6d5a2c50d6b0ebfcb9aaa91a28154e0a70605f112d30cb0cd4a78670477"
+dependencies = [
+ "fluent-bundle 0.16.0",
  "unic-langid",
 ]
 
@@ -1682,11 +1693,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fe0a21ee80050c678013f82edf4b705fe2f26f1f9877593d13198612503f493"
 dependencies = [
  "fluent-langneg",
- "fluent-syntax",
+ "fluent-syntax 0.11.1",
  "intl-memoizer",
  "intl_pluralrules",
  "rustc-hash 1.1.0",
  "self_cell 0.10.3",
+ "smallvec",
+ "unic-langid",
+]
+
+[[package]]
+name = "fluent-bundle"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01203cb8918f5711e73891b347816d932046f95f54207710bda99beaeb423bf4"
+dependencies = [
+ "fluent-langneg",
+ "fluent-syntax 0.12.0",
+ "intl-memoizer",
+ "intl_pluralrules",
+ "rustc-hash 2.1.1",
+ "self_cell 1.2.2",
  "smallvec",
  "unic-langid",
 ]
@@ -1707,6 +1734,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a530c4694a6a8d528794ee9bbd8ba0122e779629ac908d15ad5a7ae7763a33d"
 dependencies = [
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "fluent-syntax"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
+dependencies = [
+ "memchr",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1819,6 +1856,16 @@ dependencies = [
  "rust-ini",
  "thiserror 1.0.69",
  "xdg",
+]
+
+[[package]]
+name = "freedesktop_entry_parser"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b368437186ec63ceb50d0832ee1ebcb5878037fe16ead1c68081d4aee0d140a"
+dependencies = [
+ "indexmap",
+ "nom",
 ]
 
 [[package]]
@@ -2540,9 +2587,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94205d95764f5bb9db9ea98fa77f89653365ca748e27161f5bbea2ffd50e459c"
 dependencies = [
  "arc-swap",
- "fluent",
+ "fluent 0.16.1",
  "fluent-langneg",
- "fluent-syntax",
+ "fluent-syntax 0.11.1",
  "i18n-embed-impl",
  "intl-memoizer",
  "lazy_static",
@@ -2563,8 +2610,8 @@ checksum = "9fc1f8715195dffc4caddcf1cf3128da15fe5d8a137606ea8856c9300047d5a2"
 dependencies = [
  "dashmap",
  "find-crate",
- "fluent",
- "fluent-syntax",
+ "fluent 0.16.1",
+ "fluent-syntax 0.11.1",
  "i18n-config",
  "i18n-embed",
  "lazy_static",
@@ -3132,9 +3179,9 @@ checksum = "029d73f573d8e8d63e6d5020011d3255b28c3ba85d6cf870a07184ed23de9284"
 
 [[package]]
 name = "indexmap"
-version = "2.13.0"
+version = "2.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
+checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.1",
@@ -3772,6 +3819,15 @@ dependencies = [
  "cfg_aliases 0.2.1",
  "libc",
  "memoffset 0.9.1",
+]
+
+[[package]]
+name = "nom"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -7001,6 +7057,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "xdgen"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25af88f104f06d5aeb80c77e5eb85e6f6f355f86f6e34307a14befd716efe4bf"
+dependencies = [
+ "fluent 0.17.0",
+ "freedesktop_entry_parser",
+ "unic-langid",
+ "xmltree",
+]
+
+[[package]]
 name = "xkbcommon"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7034,10 +7102,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "xml"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a"
+
+[[package]]
 name = "xml-rs"
 version = "0.8.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
+
+[[package]]
+name = "xmltree"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbc04313cab124e498ab1724e739720807b6dc405b9ed0edc5860164d2e4ff70"
+dependencies = [
+ "xml",
+]
 
 [[package]]
 name = "xmlwriter"

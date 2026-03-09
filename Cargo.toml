@@ -5,6 +5,7 @@ edition = "2024"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
+xdgen = "0.1"
 
 [dependencies]
 ashpd = { version = "0.12", optional = true }
