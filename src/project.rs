@@ -76,6 +76,14 @@ impl ProjectNode {
             *open = !*open;
         }
     }
+
+    pub fn is_open(&mut self) -> bool {
+        if let Self::Folder { open, .. } = self {
+            *open
+        } else {
+            false
+        }
+    }
 }
 
 impl Ord for ProjectNode {
