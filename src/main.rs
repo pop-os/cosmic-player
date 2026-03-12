@@ -284,6 +284,7 @@ pub enum Message {
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
+    PlayPrevious,
     PlayNext,
     EndOfStream,
     MissingPlugin(gst::Message),
@@ -1321,6 +1322,55 @@ impl Application for App {
                 }
             }
 
+            //TODO: known limitations:
+            // 1) Same as for PlayNext #1 and #2
+            // 2) If we are at the first item in a folder and the previous folder is collapsed,
+            //    it will play the first playable file in this previous folder, not the last one
+            //    visually closer to the currently playing file.
+            Message::PlayPrevious => {
+                let curr_id = self.nav_model.active();
+                let curr_indent = self.nav_model.indent(curr_id);
+                let curr_position = match self.nav_model.position(curr_id) {
+                    Some(pos) => pos,
+                    None => {
+                        log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        return self.update(Message::EndOfStream);
+                    }
+                };
+                //if we are at the first item in the navmodel (folder root), we do nothing.
+                if curr_position == 1 {
+                    return self.update(Message::None);
+                }
+                if self.nav_model.activate_position(curr_position - 1) {
+                    let curr_id = self.nav_model.active();
+                    let prev_indent = self.nav_model.indent(curr_id);
+                    match self.nav_model.data_mut::<ProjectNode>(curr_id) {
+                        //The previous one is a media file, we play it.
+                        Some(ProjectNode::File { .. }) => return self.on_nav_select(curr_id),
+
+                        //The previous one is a folder.
+                        Some(ProjectNode::Folder { .. }) => {
+                            // The previous file played was inside this folder; we need to continue
+                            // moving up.
+                            if prev_indent < curr_indent {
+                                return self.update(Message::PlayPrevious);
+                            } else {
+                                let _ = self.on_nav_select(curr_id);
+                                return self.update(Message::PlayNext);
+                            }
+                        }
+
+                        //Unknown type. We do nothing.
+                        _ => log::warn!(
+                            "unknown type: {:?}",
+                            self.nav_model.data::<ProjectNode>(curr_id)
+                        ),
+                    }
+                } else {
+                    return self.update(Message::EndOfStream);
+                }
+            }
+
             Message::PlayNext => {
                 // TODO: known limitations:
                 // 1) if the user collapses the folder entry while a song is playing,
@@ -1329,10 +1379,6 @@ impl Application for App {
                 // 2) ProjectNode::File does not restrict file types to those supported by GStreamer.
                 //    Therefore, if a non-playable file (e.g., a .jpg) is encountered in a folder, it will trigger a
                 //    "failed to open file" error and halt the stream.
-                //
-                // 3) if we play the last song of a folder and the next one is already expanded by
-                //    user (or because it was played before), the player will collapse it and jump
-                //    to the next file/folder after it.
 
                 if self.flags.config_state.player_state.repeat == RepeatState::Track {
                     // we hook Message::PlayNext to the EOS signal. iced_video_player always emits EOS regardless of
@@ -1353,12 +1399,16 @@ impl Application for App {
                 //Then we activate the next one in the nav bar and ask to load it
                 if self.nav_model.activate_position(curr_position + 1) {
                     let curr_id = self.nav_model.active();
-                    match self.nav_model.data::<ProjectNode>(curr_id) {
+                    match self.nav_model.data_mut::<ProjectNode>(curr_id) {
                         //The next one is a media file, we play it.
                         Some(ProjectNode::File { .. }) => return self.on_nav_select(curr_id),
 
                         //The next one is a folder. We expand it and recall PlayNext.
-                        Some(ProjectNode::Folder { .. }) => {
+                        Some(node @ ProjectNode::Folder { .. }) => {
+                            //in case folder was expanded previously, to not skip it
+                            if node.is_open() {
+                                let _ = self.on_nav_select(curr_id);
+                            }
                             let _ = self.on_nav_select(curr_id);
                             return self.update(Message::PlayNext);
                         }
@@ -1694,7 +1744,7 @@ impl Application for App {
             );
         }
         if self.controls {
-            let mut row = widget::row::with_capacity(8)
+            let mut row = widget::row::with_capacity(9)
                 .align_items(Alignment::Center)
                 .spacing(space_xxs)
                 .push(
@@ -1707,6 +1757,18 @@ impl Application for App {
                     )
                     .on_press(Message::PlayPause),
                 );
+            row = row.push(
+                widget::button::icon(
+                    widget::icon::from_name("media-skip-backward-symbolic").size(16),
+                )
+                .on_press(Message::PlayPrevious),
+            );
+            row = row.push(
+                widget::button::icon(
+                    widget::icon::from_name("media-skip-forward-symbolic").size(16),
+                )
+                .on_press(Message::PlayNext),
+            );
             row = row.push(widget::tooltip(
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
