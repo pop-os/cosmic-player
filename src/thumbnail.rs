@@ -42,11 +42,11 @@ pub fn main(
         }
     }?;
 
-    if let Some((width, height)) = size_opt {
-        image = image.thumbnail(width, height);
-    }
+    // if let Some((width, height)) = size_opt {
+    //     image = image.thumbnail(width, height);
+    // }
 
-    image.save_with_format(output, ImageFormat::Png)?;
+    // image.save_with_format(output, ImageFormat::Png)?;
 
     Ok(())
 }
