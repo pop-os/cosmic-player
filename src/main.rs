@@ -1348,7 +1348,7 @@ impl Application for App {
                 if self.flags.config_state.player_state.repeat == RepeatState::Track {
                     // we hook Message::PlayNext to the EOS signal. iced_video_player always emits EOS regardless of
                     // looping state, so do nothing if repeat is set.
-                    return Command::none();
+                    return Task::none();
                 }
 
                 //first we get info about current media id & position in nav_bar
@@ -1733,10 +1733,10 @@ impl Application for App {
                         RepeatState::Track => RepeatState::Disabled,
                     },
                 )),
-                match self.flags.config_state.player_state.repeat {
+                widget::text(match self.flags.config_state.player_state.repeat {
                     RepeatState::Disabled => fl!("repeat-disabled"),
                     RepeatState::Track => fl!("repeat-track"),
-                },
+                }),
                 widget::tooltip::Position::Top,
             ));
             if self.core.is_condensed() {

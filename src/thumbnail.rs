@@ -1,4 +1,3 @@
-use cosmic::iced_core::image::Data;
 use iced_video_player::Position;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use std::{error::Error, num::NonZero, path::Path, time::Duration};
@@ -29,9 +28,10 @@ pub fn main(
             };
             video.thumbnails([position], NonZero::new(1).unwrap())?
         };
-        //TODO: do not require clone of pixels data
-        match thumbnails[0].data() {
-            Data::Rgba {
+        // TODO: do not require clone of pixels data
+        match &thumbnails[0] {
+            cosmic::widget::image::Handle::Rgba {
+                id: _,
                 width,
                 height,
                 pixels,
@@ -42,11 +42,11 @@ pub fn main(
         }
     }?;
 
-    // if let Some((width, height)) = size_opt {
-    //     image = image.thumbnail(width, height);
-    // }
+    if let Some((width, height)) = size_opt {
+        image = image.thumbnail(width, height);
+    }
 
-    // image.save_with_format(output, ImageFormat::Png)?;
+    image.save_with_format(output, ImageFormat::Png)?;
 
     Ok(())
 }
