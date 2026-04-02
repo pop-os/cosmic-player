@@ -2,31 +2,32 @@
 name = "cosmic-player"
 version = "1.0.11"
 edition = "2024"
+rust-version = "1.93"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "gitcl"] }
 
 [dependencies]
 ashpd = { version = "0.12", optional = true }
-gstreamer-tag = "0.23"
-image = "0.24.9"
+gstreamer-tag = "0.25"
+image = "0.25"
 serde = { version = "1", features = ["serde_derive"] }
 tempfile = "3"
 tokio = { version = "1", features = ["sync"] }
 url = { version = "2", features = ["serde"] }
 # CLI arguments
-clap_lex = "0.7"
+clap_lex = "1.1"
 # Internationalization
-icu_collator = "1.5"
-icu_provider = { version = "1.5", features = ["sync"] }
-i18n-embed = { version = "0.14", features = [
+icu_collator = "2.2"
+icu_locale = "2.2"
+i18n-embed = { version = "0.16", features = [
     "fluent-system",
     "desktop-requester",
 ] }
-i18n-embed-fl = "0.7"
+i18n-embed-fl = "0.10"
 rust-embed = "8"
 # Logging
-env_logger = "0.10"
+env_logger = "0.11"
 log = "0.4"
 
 [dependencies.iced_video_player]
@@ -40,11 +41,12 @@ default-features = false
 features = ["advanced-shaping", "tokio", "winit", "multi-window"]
 
 [dependencies.mpris-server]
-version = "0.8.1"
+version = "0.10"
+features = ["tokio"]
 optional = true
 
 [target.'cfg(unix)'.dependencies]
-fork = "0.2"
+fork = "0.7"
 
 [features]
 default = ["mpris-server", "xdg-portal", "wgpu", "wayland"]

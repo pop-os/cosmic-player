@@ -1,18 +1,16 @@
-use cosmic::{
-    iced::{
-        futures::{self, SinkExt, Stream},
-        Subscription, stream,
-    },
-};
+use cosmic::iced::futures::{self, SinkExt, Stream};
+use cosmic::iced::{Subscription, stream};
+use mpris_server::zbus::{Result, fdo};
 use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
     Server, Signal, Time, TrackId, Volume,
-    zbus::{Result, fdo},
 };
-use std::{any::TypeId, future, process};
+use std::any::TypeId;
+use std::{future, process};
 use tokio::sync::{Mutex, mpsc};
 
-use crate::{Message, MprisEvent, MprisMeta, MprisState, config::RepeatState};
+use crate::config::RepeatState;
+use crate::{Message, MprisEvent, MprisMeta, MprisState};
 
 impl MprisMeta {
     fn metadata(&self) -> Metadata {

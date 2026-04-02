@@ -3,10 +3,8 @@
 
 //! Integrations with XDG portals.
 
-use ashpd::{
-    desktop::inhibit::{InhibitFlags, InhibitProxy},
-    enumflags2::{BitFlags, make_bitflags},
-};
+use ashpd::desktop::inhibit::{InhibitFlags, InhibitProxy};
+use ashpd::enumflags2::{BitFlags, make_bitflags};
 use log::{debug, warn};
 use tokio::sync::watch::Receiver;
 

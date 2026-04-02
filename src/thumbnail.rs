@@ -1,6 +1,9 @@
 use iced_video_player::Position;
 use image::{DynamicImage, ImageFormat, RgbaImage};
-use std::{error::Error, num::NonZero, path::Path, time::Duration};
+use std::error::Error;
+use std::num::NonZero;
+use std::path::Path;
+use std::time::Duration;
 use url::Url;
 
 use super::video;
@@ -14,7 +17,7 @@ pub fn main(
         let thumbnails = {
             let mut video = match video::new_video(input, video::VideoSettings { mute: true }) {
                 Ok(ok) => ok,
-                Err(_err) => return Err(Into::into(format!("missing required plugin"))),
+                Err(_err) => return Err(Into::into("missing required plugin".to_string())),
             };
 
             let duration = video.duration();
@@ -37,7 +40,7 @@ pub fn main(
                 pixels,
             } => RgbaImage::from_raw(*width, *height, pixels.to_vec())
                 .map(DynamicImage::ImageRgba8)
-                .ok_or_else(|| format!("failed to convert thumbnail")),
+                .ok_or_else(|| "failed to convert thumbnail".to_string()),
             _ => Err(format!("unsupported thumbnail handle {:?}", thumbnails[0])),
         }
     }?;
