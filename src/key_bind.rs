@@ -1,4 +1,5 @@
-use cosmic::{iced::keyboard::Key, iced::core::keyboard::key::Named};
+use cosmic::iced::keyboard::Key;
+use cosmic::iced::keyboard::key::Named;
 use std::collections::HashMap;
 
 use crate::Action;
