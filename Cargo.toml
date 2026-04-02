@@ -30,15 +30,14 @@ env_logger = "0.10"
 log = "0.4"
 
 [dependencies.iced_video_player]
-git = "https://github.com/jackpot51/iced_video_player.git"
-branch = "prev-cosmic"
+git = "https://github.com/wash2/iced_video_player.git"
+branch = "iced-rebase"
 default-features = false
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
-branch = "prev-master"
 default-features = false
-features = ["tokio", "winit"]
+features = ["tokio", "winit", "multi-window"]
 
 [dependencies.mpris-server]
 version = "0.8.1"
@@ -56,15 +55,13 @@ wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
 inherits = "release"
 debug = true
 
-# Keep cosmic-text at version compatible with prev-master of libcosmic
-[patch.'https://github.com/pop-os/cosmic-text'.cosmic-text]
-git = "https://github.com/pop-os/cosmic-text//"
-rev = "166b59f560c551dab391a864f7c1f503c1e18446"
-
-# [patch.'https://github.com/jackpot51/iced_video_player']
-# iced_video_player = { path = "../../iced_video_player" }
+# [patch.'https://github.com/wash2/iced_video_player']
+# iced_video_player = { path = "../iced_video_player" }
 
 # [patch.'https://github.com/pop-os/libcosmic']
 # libcosmic = { path = "../libcosmic" }
 # cosmic-config = { path = "../libcosmic/cosmic-config" }
 # cosmic-theme = { path = "../libcosmic/cosmic-theme" }
+# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }
+# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "iced-rebase" }

@@ -37,3 +37,5 @@ close-media-folder = 关闭媒体文件夹
 quit = 退出
 off = 已关闭
 clear-recent = 清空近期列表
+repeat-disabled = 重复已禁用
+repeat-track = 重复轨道

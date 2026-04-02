@@ -1,6 +1,9 @@
-use cosmic::iced::{
-    futures::{self, SinkExt},
-    subscription::{self, Subscription},
+use cosmic::{
+    iced::{
+        futures::{self, SinkExt, Stream},
+        Subscription,
+    },
+    iced_futures::stream,
 };
 use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
@@ -377,15 +380,13 @@ impl PlaylistsInterface for Player {
 }
 */
 
-pub fn subscription() -> Subscription<Message> {
-    struct MprisSubscription;
-    subscription::channel(
-        TypeId::of::<MprisSubscription>(),
-        16,
-        move |mut msg_tx| async move {
+fn watcher_stream() -> impl Stream<Item = Message> {
+    stream::channel(
+        5,
+        move |mut msg_tx: futures::channel::mpsc::Sender<Message>| async move {
             let (event_tx, mut event_rx) = mpsc::unbounded_channel();
-            let meta = MprisMeta::default();
-            let state = MprisState::default();
+            let meta: MprisMeta = MprisMeta::default();
+            let state: MprisState = MprisState::default();
             msg_tx
                 .send(Message::MprisChannel(meta.clone(), state.clone(), event_tx))
                 .await
@@ -454,4 +455,10 @@ pub fn subscription() -> Subscription<Message> {
             }
         },
     )
+}
+
+#[cold]
+pub fn subscription() -> Subscription<Message> {
+    struct MprisSubscription;
+    Subscription::run_with(TypeId::of::<MprisSubscription>(), |_| watcher_stream())
 }

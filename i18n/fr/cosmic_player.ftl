@@ -37,3 +37,5 @@ close-media-folder = Fermer le dossier du média
 quit = Quitter
 off = Désactivé
 clear-recent = Effacer la liste récente
+repeat-disabled = Répétition désactivée
+repeat-track = Répéter la piste

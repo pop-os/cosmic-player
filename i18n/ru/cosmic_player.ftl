@@ -7,7 +7,7 @@ settings = Параметры
 
 ### Appearance
 
-appearance = Оформление
+appearance = Внешний вид
 theme = Тема
 match-desktop = Как в системе
 dark = Тёмная
@@ -30,3 +30,5 @@ close-media-folder = Закрыть папку медиафайлов
 quit = Выйти
 off = Выкл.
 clear-recent = Очистить список недавних
+repeat-disabled = Повтор отключён
+repeat-track = Повторять трек

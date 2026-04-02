@@ -22,3 +22,5 @@ clear-recent = Жуырдағылар тізімін тазалау
 open-media-folder = Медиа бумасын ашу...
 open-recent-media-folder = Жуырдағы медиа бумасын ашу
 close-media-folder = Медиа бумасын жабу
+repeat-disabled = Қайталау сөндірілген
+repeat-track = Тректі қайталау
