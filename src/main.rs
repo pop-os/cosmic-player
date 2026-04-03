@@ -1460,7 +1460,12 @@ impl Application for App {
             Message::NewFrame => {
                 if let Some(video) = &self.video_opt {
                     if !self.dragging {
-                        self.position = video.position().as_secs_f64();
+                        let new_position = video.position().as_secs_f64();
+                        // NOTE: video.position() can sometimes return 0 while buffering new content
+                        let is_valid_position = self.position > 0 && new_position != 0;
+                        if is_valid_position {
+                            self.position = video.position().as_secs_f64();
+                        }
                         self.update_controls(self.dropdown_opt.is_some());
                     }
                 }
