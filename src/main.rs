@@ -80,6 +80,17 @@ fn language_name(code: &str) -> Option<String> {
     Some(name.to_string())
 }
 
+fn get_framerate(video: &Video) -> Option<f64> {
+    let pipeline = video.pipeline();
+    let video_sink: gst::Element = pipeline.property("video-sink");
+    let binding = video_sink.pads();
+    let pad = binding.first()?;
+    let caps = pad.current_caps()?;
+    let structure = caps.structure(0)?;
+    let framerate = structure.get::<gst::Fraction>("framerate").ok()?;
+    Some(framerate.numer() as f64 / framerate.denom() as f64)
+}
+
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn Error>> {
@@ -178,6 +189,9 @@ pub enum Action {
     PlayPause,
     SeekBackward,
     SeekForward,
+    NextFrame,
+    PreviousFrame,
+    AbRepeat,
     WindowClose,
 }
 
@@ -198,6 +212,9 @@ impl MenuAction for Action {
             Self::PlayPause => Message::PlayPause,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
+            Self::NextFrame => Message::NextFrame,
+            Self::PreviousFrame => Message::PreviousFrame,
+            Self::AbRepeat => Message::AbRepeat,
             Self::WindowClose => Message::WindowClose,
         }
     }
@@ -292,11 +309,14 @@ pub enum Message {
     SeekRelative(f64),
     SeekRelease,
     PlayNext,
+    NextFrame,
+    PreviousFrame,
     EndOfStream,
     MissingPlugin(gst::Message),
     MprisChannel(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>),
     NewFrame,
     Reload,
+    AbRepeat,
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
@@ -326,6 +346,7 @@ pub struct App {
     current_audio: i32,
     text_codes: Vec<TextCode>,
     current_text: Option<i32>,
+    ab_repeat: Option<(Option<f64>, Option<f64>)>,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
 }
@@ -890,6 +911,7 @@ impl Application for App {
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: None,
+            ab_repeat: None,
             #[cfg(feature = "xdg-portal")]
             inhibit,
         };
@@ -1036,6 +1058,7 @@ impl Application for App {
             }
             Message::FileLoad(url) => {
                 self.flags.url_opt = Some(url);
+                self.ab_repeat = None;
                 return self.load();
             }
             Message::FileOpen => {
@@ -1385,11 +1408,63 @@ impl Application for App {
                 }
             }
 
+            Message::NextFrame => {
+                if let Some(video) = &mut self.video_opt {
+                    video.pipeline().send_event(gst::event::Step::new(
+                        gst::format::Buffers::from_u64(1),
+                        1.0,
+                        true,
+                        false,
+                    ));
+                    video.set_paused(true);
+                    self.update_controls(true);
+                }
+            }
+            Message::PreviousFrame => {
+                if let Some(video) = &mut self.video_opt {
+                    // TODO: Improve Accuracy.
+                    let current = video.position();
+                    let fps = get_framerate(video).unwrap_or(30.0);
+                    let frame_duration = Duration::from_secs_f64(1.0 / fps);
+                    let target = current.saturating_sub(frame_duration + Duration::from_millis(1));
+
+                    video.seek(target, true).expect("seek");
+                    video.set_paused(true);
+                    self.update_controls(true);
+                }
+            }
+            Message::AbRepeat => {
+                let current_opt = self.video_opt.as_ref().map(|v| v.position().as_secs_f64());
+                if let Some(current) = current_opt {
+                    match self.ab_repeat {
+                        None => {
+                            self.ab_repeat = Some((Some(current), None));
+                        }
+                        Some((a, None)) => {
+                            self.ab_repeat = Some((a, Some(current)));
+                        }
+                        Some(_) => {
+                            self.ab_repeat = None;
+                        }
+                    }
+                    self.update_controls(true);
+                }
+            }
+
             Message::EndOfStream => {
-                println!(
-                    "end of stream, repeat={:?}",
-                    self.flags.config_state.player_state.repeat
-                );
+                if let Some((a, _)) = self.ab_repeat {
+                    let target = a.unwrap_or(0.0);
+                    if let Some(video) = &mut self.video_opt {
+                        video
+                            .seek(Duration::from_secs_f64(target), true)
+                            .expect("seek");
+                    }
+                } else {
+                    println!(
+                        "end of stream, repeat={:?}",
+                        self.flags.config_state.player_state.repeat
+                    );
+                }
             }
 
             Message::MissingPlugin(element) => {
@@ -1458,9 +1533,18 @@ impl Application for App {
                 self.update_mpris_state();
             }
             Message::NewFrame => {
-                if let Some(video) = &self.video_opt {
+                if let Some(video) = &mut self.video_opt {
                     if !self.dragging {
                         self.position = video.position().as_secs_f64();
+
+                        if let Some((a, b)) = self.ab_repeat {
+                            let target_a = a.unwrap_or(0.0);
+                            let target_b = b.unwrap_or(self.duration);
+                            if self.position >= target_b {
+                                let _ = video.seek(Duration::from_secs_f64(target_a), true);
+                            }
+                        }
+
                         self.update_controls(self.dropdown_opt.is_some());
                     }
                 }
@@ -1487,6 +1571,7 @@ impl Application for App {
             &self.flags.config_state,
             &self.key_binds,
             &self.projects,
+            &self.ab_repeat,
         )]
     }
 

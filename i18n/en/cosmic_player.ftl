@@ -37,3 +37,11 @@ quit = Quit
 
 repeat-disabled = Repeat disabled
 repeat-track = Repeat track
+
+playback = Playback
+next-frame = Next Frame
+previous-frame = Previous Frame
+ab-repeat = A-B Repeat
+ab-repeat-set-a = A-B Repeat (A)
+ab-repeat-set-b = A-B Repeat (B)
+ab-repeat-clear = Clear A-B Repeat

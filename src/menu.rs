@@ -17,6 +17,7 @@ pub fn menu_bar<'a>(
     config_state: &ConfigState,
     key_binds: &HashMap<KeyBind, Action>,
     projects: &[(String, PathBuf)],
+    ab_repeat: &Option<(Option<f64>, Option<f64>)>,
 ) -> Element<'a, Message> {
     let home_dir_opt = std::env::home_dir();
     let format_path = |path: &PathBuf| -> String {
@@ -87,23 +88,44 @@ pub fn menu_bar<'a>(
         ));
     }
 
-    MenuBar::new(vec![menu::Tree::with_children(
-        RcElementWrapper::new(Element::from(menu::root(fl!("file")))),
-        menu::items(
-            key_binds,
-            vec![
-                menu::Item::Button(fl!("open-media"), None, Action::FileOpen),
-                menu::Item::Folder(fl!("open-recent-media"), recent_files),
-                menu::Item::Button(fl!("close-file"), None, Action::FileClose),
-                menu::Item::Divider,
-                menu::Item::Button(fl!("open-media-folder"), None, Action::FolderOpen),
-                menu::Item::Folder(fl!("open-recent-media-folder"), recent_projects),
-                menu::Item::Folder(fl!("close-media-folder"), close_projects),
-                menu::Item::Divider,
-                menu::Item::Button(fl!("quit"), None, Action::WindowClose),
-            ],
+    MenuBar::new(vec![
+        menu::Tree::with_children(
+            RcElementWrapper::new(Element::from(menu::root(fl!("file")))),
+            menu::items(
+                key_binds,
+                vec![
+                    menu::Item::Button(fl!("open-media"), None, Action::FileOpen),
+                    menu::Item::Folder(fl!("open-recent-media"), recent_files),
+                    menu::Item::Button(fl!("close-file"), None, Action::FileClose),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("open-media-folder"), None, Action::FolderOpen),
+                    menu::Item::Folder(fl!("open-recent-media-folder"), recent_projects),
+                    menu::Item::Folder(fl!("close-media-folder"), close_projects),
+                    menu::Item::Divider,
+                    menu::Item::Button(fl!("quit"), None, Action::WindowClose),
+                ],
+            ),
         ),
-    )])
+        menu::Tree::with_children(
+            RcElementWrapper::new(Element::from(menu::root(fl!("playback")))),
+            menu::items(
+                key_binds,
+                vec![
+                    menu::Item::Button(fl!("next-frame"), None, Action::NextFrame),
+                    menu::Item::Button(fl!("previous-frame"), None, Action::PreviousFrame),
+                    menu::Item::Button(
+                        match ab_repeat {
+                            None => fl!("ab-repeat-set-a"),
+                            Some((_, None)) => fl!("ab-repeat-set-b"),
+                            Some((_, Some(_))) => fl!("ab-repeat-clear"),
+                        },
+                        None,
+                        Action::AbRepeat,
+                    ),
+                ],
+            ),
+        ),
+    ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(320))
     .spacing(theme::active().cosmic().spacing.space_xxxs.into())
