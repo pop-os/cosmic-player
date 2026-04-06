@@ -37,7 +37,7 @@ default-features = false
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["tokio", "winit", "multi-window"]
+features = ["advanced-shaping", "tokio", "winit", "multi-window"]
 
 [dependencies.mpris-server]
 version = "0.8.1"
