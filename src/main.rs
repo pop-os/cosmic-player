@@ -1409,7 +1409,9 @@ impl Application for App {
             }
 
             Message::NextFrame => {
-                if let Some(video) = &mut self.video_opt {
+                if let Some(video) = &mut self.video_opt
+                    && video.has_video()
+                {
                     video.pipeline().send_event(gst::event::Step::new(
                         gst::format::Buffers::from_u64(1),
                         1.0,
@@ -1421,7 +1423,9 @@ impl Application for App {
                 }
             }
             Message::PreviousFrame => {
-                if let Some(video) = &mut self.video_opt {
+                if let Some(video) = &mut self.video_opt
+                    && video.has_video()
+                {
                     // TODO: Improve Accuracy.
                     let current = video.position();
                     let fps = get_framerate(video).unwrap_or(30.0);
