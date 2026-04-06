@@ -37,7 +37,7 @@ default-features = false
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 default-features = false
-features = ["tokio", "winit", "multi-window"]
+features = ["advanced-shaping", "tokio", "winit", "multi-window"]
 
 [dependencies.mpris-server]
 version = "0.8.1"
@@ -47,9 +47,10 @@ optional = true
 fork = "0.2"
 
 [features]
-default = ["mpris-server", "xdg-portal", "wgpu"]
+default = ["mpris-server", "xdg-portal", "wgpu", "wayland"]
 xdg-portal = ["ashpd", "libcosmic/xdg-portal"]
 wgpu = ["iced_video_player/wgpu", "libcosmic/wgpu"]
+wayland = ["libcosmic/wayland"]
 
 [profile.release-with-debug]
 inherits = "release"

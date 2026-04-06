@@ -18,6 +18,7 @@ pub fn menu_bar<'a>(
     key_binds: &HashMap<KeyBind, Action>,
     projects: &[(String, PathBuf)],
     ab_repeat: &Option<(Option<f64>, Option<f64>)>,
+    has_video: bool,
 ) -> Element<'a, Message> {
     let home_dir_opt = std::env::home_dir();
     let format_path = |path: &PathBuf| -> String {
@@ -88,6 +89,30 @@ pub fn menu_bar<'a>(
         ));
     }
 
+    let mut playback = Vec::with_capacity(3);
+
+    if has_video {
+        playback.push(menu::Item::Button(
+            fl!("next-frame"),
+            None,
+            Action::NextFrame,
+        ));
+        playback.push(menu::Item::Button(
+            fl!("previous-frame"),
+            None,
+            Action::PreviousFrame,
+        ));
+    }
+
+    playback.push(menu::Item::Button(
+        match ab_repeat {
+            None => fl!("ab-repeat-set-a"),
+            Some((_, None)) => fl!("ab-repeat-set-b"),
+            Some((_, Some(_))) => fl!("ab-repeat-clear"),
+        },
+        None,
+        Action::AbRepeat,
+    ));
     MenuBar::new(vec![
         menu::Tree::with_children(
             RcElementWrapper::new(Element::from(menu::root(fl!("file")))),
@@ -108,22 +133,7 @@ pub fn menu_bar<'a>(
         ),
         menu::Tree::with_children(
             RcElementWrapper::new(Element::from(menu::root(fl!("playback")))),
-            menu::items(
-                key_binds,
-                vec![
-                    menu::Item::Button(fl!("next-frame"), None, Action::NextFrame),
-                    menu::Item::Button(fl!("previous-frame"), None, Action::PreviousFrame),
-                    menu::Item::Button(
-                        match ab_repeat {
-                            None => fl!("ab-repeat-set-a"),
-                            Some((_, None)) => fl!("ab-repeat-set-b"),
-                            Some((_, Some(_))) => fl!("ab-repeat-clear"),
-                        },
-                        None,
-                        Action::AbRepeat,
-                    ),
-                ],
-            ),
+            menu::items(key_binds, playback),
         ),
     ])
     .item_height(ItemHeight::Dynamic(40))

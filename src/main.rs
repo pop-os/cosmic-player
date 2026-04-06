@@ -1409,7 +1409,9 @@ impl Application for App {
             }
 
             Message::NextFrame => {
-                if let Some(video) = &mut self.video_opt {
+                if let Some(video) = &mut self.video_opt
+                    && video.has_video()
+                {
                     video.pipeline().send_event(gst::event::Step::new(
                         gst::format::Buffers::from_u64(1),
                         1.0,
@@ -1421,7 +1423,9 @@ impl Application for App {
                 }
             }
             Message::PreviousFrame => {
-                if let Some(video) = &mut self.video_opt {
+                if let Some(video) = &mut self.video_opt
+                    && video.has_video()
+                {
                     // TODO: Improve Accuracy.
                     let current = video.position();
                     let fps = get_framerate(video).unwrap_or(30.0);
@@ -1572,6 +1576,7 @@ impl Application for App {
             &self.key_binds,
             &self.projects,
             &self.ab_repeat,
+            self.video_opt.as_ref().is_some_and(|v| v.has_video()),
         )]
     }
 
@@ -1639,7 +1644,7 @@ impl Application for App {
             background_color = theme.cosmic().bg_component_color().into();
             text_color_opt = Some(Color::from(theme.cosmic().on_bg_component_color()));
 
-            let mut col = widget::column();
+            let mut col = widget::column::with_capacity(10);
             col = col.push(widget::space::vertical());
             if let Some(album_art) = &self.album_art_opt {
                 col = col.push(
@@ -1967,6 +1972,13 @@ impl Application for App {
                 Message::SystemThemeModeChange(update.config)
             }),
         ];
+        if self.video_opt.as_ref().is_some_and(|v| {
+            ((!v.eos() && !v.paused()) || self.ab_repeat.is_some()) && !v.has_video()
+        }) {
+            subscriptions.push(
+                cosmic::iced::time::every(Duration::from_millis(64)).map(|_| Message::NewFrame),
+            );
+        }
 
         #[cfg(feature = "mpris-server")]
         {
