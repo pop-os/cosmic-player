@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use cosmic::{
-    action::{self, app},
+    action,
     app::{Core, Settings, Task},
     command::set_theme,
     cosmic_config::{self, CosmicConfigEntry},
@@ -1016,12 +1016,12 @@ impl Application for App {
         }
     }
 
-    fn style(&self) -> Option<cosmic::iced_core::theme::Style> {
+    fn style(&self) -> Option<cosmic::iced::core::theme::Style> {
         // This ensures we have a solid background color even when using no content container
 
         let theme = self.core.system_theme();
 
-        Some(cosmic::iced_core::theme::Style {
+        Some(cosmic::iced::core::theme::Style {
             background_color: theme.cosmic().bg_color().into(),
             icon_color: theme.cosmic().on_bg_color().into(),
             text_color: theme.cosmic().on_bg_color().into(),

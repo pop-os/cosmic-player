@@ -1,9 +1,8 @@
 use cosmic::{
     iced::{
         futures::{self, SinkExt, Stream},
-        Subscription,
+        Subscription, stream,
     },
-    iced_futures::stream,
 };
 use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
