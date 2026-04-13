@@ -22,3 +22,4 @@ no-video-or-audio-file-open = 비디오 혹은 오디오가 열려있지 않음
 off = 끄기
 album = 앨범: { $album }
 close-file = 파일 닫기
+repeat-disabled = 반복 비활성화

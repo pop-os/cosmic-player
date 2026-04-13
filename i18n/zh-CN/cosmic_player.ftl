@@ -28,10 +28,10 @@ light = 亮色模式
 ## File
 
 file = 文件
-open-media = 打开媒体文件...
+open-media = 打开媒体文件…
 open-recent-media = 打开最近媒体文件
 close-file = 关闭文件
-open-media-folder = 打开媒体文件夹...
+open-media-folder = 打开媒体文件夹…
 open-recent-media-folder = 打开最近媒体文件夹
 close-media-folder = 关闭媒体文件夹
 quit = 退出
@@ -39,3 +39,10 @@ off = 已关闭
 clear-recent = 清空近期列表
 repeat-disabled = 重复已禁用
 repeat-track = 重复轨道
+playback = 回放
+next-frame = 下一帧
+previous-frame = 上一帧
+ab-repeat = A-B 重复
+ab-repeat-set-a = A-B 重复（A）
+ab-repeat-set-b = A-B 重复（B）
+ab-repeat-clear = 清除 A-B 重复
