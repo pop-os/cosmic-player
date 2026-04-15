@@ -1228,7 +1228,9 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     if volume >= 0.0 && volume <= 1.0 {
                         video.set_volume(volume);
-                        video.set_muted(false);
+                        if volume > video.volume() {
+                            video.set_muted(false);
+                        }
                         self.update_controls(true);
                     }
                 }
@@ -1315,7 +1317,9 @@ impl Application for App {
 
                     if (volume >= 0.0 && volume <= 1.0) && !nav_bar_toggled {
                         video.set_volume(volume);
-                        video.set_muted(false);
+                        if volume > video.volume() {
+                            video.set_muted(false);
+                        }
                         self.update_controls(true);
                     }
                 }
