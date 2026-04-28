@@ -152,12 +152,12 @@ impl RootInterface for Player {
 impl PlayerInterface for Player {
     async fn next(&self) -> fdo::Result<()> {
         log::info!("Next");
-        Ok(())
+        self.message(Message::PlayNext).await
     }
 
     async fn previous(&self) -> fdo::Result<()> {
         log::info!("Previous");
-        Ok(())
+        self.message(Message::PlayPrev).await
     }
 
     async fn pause(&self) -> fdo::Result<()> {
@@ -273,12 +273,12 @@ impl PlayerInterface for Player {
 
     async fn can_go_next(&self) -> fdo::Result<bool> {
         log::info!("CanGoNext");
-        Ok(false)
+        Ok(true)
     }
 
     async fn can_go_previous(&self) -> fdo::Result<bool> {
         log::info!("CanGoPrevious");
-        Ok(false)
+        Ok(true)
     }
 
     async fn can_play(&self) -> fdo::Result<bool> {

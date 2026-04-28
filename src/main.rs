@@ -187,6 +187,8 @@ pub enum Action {
     FolderOpenRecent(usize),
     Fullscreen,
     PlayPause,
+    PlayPrev,
+    PlayNext,
     SeekBackward,
     SeekForward,
     NextFrame,
@@ -210,6 +212,8 @@ impl MenuAction for Action {
             Self::FolderOpenRecent(index) => Message::FolderOpenRecent(*index),
             Self::Fullscreen => Message::Fullscreen,
             Self::PlayPause => Message::PlayPause,
+            Self::PlayPrev => Message::PlayPrev,
+            Self::PlayNext => Message::PlayNext,
             Self::SeekBackward => Message::SeekRelative(-10.0),
             Self::SeekForward => Message::SeekRelative(10.0),
             Self::NextFrame => Message::NextFrame,
@@ -308,6 +312,7 @@ pub enum Message {
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
+    PlayPrev,
     PlayNext,
     NextFrame,
     PreviousFrame,
@@ -1355,6 +1360,55 @@ impl Application for App {
                 }
             }
 
+            Message::PlayPrev => {
+                if self.flags.config_state.player_state.repeat == RepeatState::Track {
+                    return Task::none();
+                }
+
+                //first we get info about current media id & position in nav_bar
+                let curr_id = self.nav_model.active();
+                let curr_position = match self.nav_model.position(curr_id) {
+                    Some(pos) => pos,
+                    None => {
+                        log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        return self.update(Message::EndOfStream);
+                    }
+                };
+
+                if let Some(video) = &mut self.video_opt {
+                    self.position = video.position().as_secs_f64();
+
+                    if self.position > 3.0 {
+                        video.seek(0, false).expect("seek");
+                    } else {
+                        if self.nav_model.activate_position(curr_position - 1) {
+                            let curr_id = self.nav_model.active();
+                            match self.nav_model.data::<ProjectNode>(curr_id) {
+                                //The prev one is a media file, we play it.
+                                Some(ProjectNode::File { .. }) => {
+                                    return self.on_nav_select(curr_id);
+                                }
+
+                                //The prev one is a folder. We expand it and recall PlayPrev.
+                                Some(ProjectNode::Folder { .. }) => {
+                                    let _ = self.on_nav_select(curr_id);
+                                    return self.update(Message::PlayPrev);
+                                }
+
+                                //Unknown type. We do nothing.
+                                _ => log::warn!(
+                                    "unknown type: {:?}",
+                                    self.nav_model.data::<ProjectNode>(curr_id)
+                                ),
+                            }
+                        } else {
+                            // first file
+                            video.seek(0, false).expect("seek");
+                        }
+                    }
+                }
+            }
+
             Message::PlayNext => {
                 // TODO: known limitations:
                 // 1) if the user collapses the folder entry while a song is playing,
@@ -1796,19 +1850,31 @@ impl Application for App {
             );
         }
         if self.controls {
-            let mut row = widget::row::with_capacity(7)
+            let mut row = widget::row::with_capacity(9)
                 .align_y(Alignment::Center)
                 .spacing(space_xxs)
                 .push(
                     widget::button::icon(
-                        if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
-                            widget::icon::from_name("media-playback-start-symbolic").size(16)
-                        } else {
-                            widget::icon::from_name("media-playback-pause-symbolic").size(16)
-                        },
+                        widget::icon::from_name("media-skip-backward-symbolic").size(16),
                     )
-                    .on_press(Message::PlayPause),
+                    .on_press(Message::PlayPrev),
                 );
+            row = row.push(
+                widget::button::icon(
+                    if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                        widget::icon::from_name("media-playback-start-symbolic").size(16)
+                    } else {
+                        widget::icon::from_name("media-playback-pause-symbolic").size(16)
+                    },
+                )
+                .on_press(Message::PlayPause),
+            );
+            row = row.push(
+                widget::button::icon(
+                    widget::icon::from_name("media-skip-forward-symbolic").size(16),
+                )
+                .on_press(Message::PlayNext),
+            );
             row = row.push(widget::tooltip(
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
