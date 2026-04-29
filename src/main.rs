@@ -1854,10 +1854,21 @@ impl Application for App {
                 .align_y(Alignment::Center)
                 .spacing(space_xxs)
                 .push(
-                    widget::button::icon(
-                        widget::icon::from_name("media-skip-backward-symbolic").size(16),
-                    )
-                    .on_press(Message::PlayPrev),
+                    if self
+                        .video_opt
+                        .as_ref()
+                        .map_or(true, |video| video.has_video())
+                    {
+                        widget::button::icon(
+                            widget::icon::from_name("jump-backward-10-symbolic").size(16),
+                        )
+                        .on_press(Message::SeekRelative(-10.0))
+                    } else {
+                        widget::button::icon(
+                            widget::icon::from_name("media-skip-backward-symbolic").size(16),
+                        )
+                        .on_press(Message::PlayPrev)
+                    },
                 );
             row = row.push(
                 widget::button::icon(
@@ -1869,12 +1880,25 @@ impl Application for App {
                 )
                 .on_press(Message::PlayPause),
             );
+
             row = row.push(
-                widget::button::icon(
-                    widget::icon::from_name("media-skip-forward-symbolic").size(16),
-                )
-                .on_press(Message::PlayNext),
+                if self
+                    .video_opt
+                    .as_ref()
+                    .map_or(true, |video| video.has_video())
+                {
+                    widget::button::icon(
+                        widget::icon::from_name("jump-forward-10-symbolic").size(16),
+                    )
+                    .on_press(Message::SeekRelative(10.0))
+                } else {
+                    widget::button::icon(
+                        widget::icon::from_name("media-skip-forward-symbolic").size(16),
+                    )
+                    .on_press(Message::PlayNext)
+                },
             );
+
             row = row.push(widget::tooltip(
                 widget::button::icon(
                     widget::icon::from_name(match self.flags.config_state.player_state.repeat {
