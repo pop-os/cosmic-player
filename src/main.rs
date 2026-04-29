@@ -64,6 +64,12 @@ const GST_PLAY_FLAG_VIDEO: i32 = 1 << 0;
 const GST_PLAY_FLAG_AUDIO: i32 = 1 << 1;
 const GST_PLAY_FLAG_TEXT: i32 = 1 << 2;
 
+const JUMP_BACKWARD_ICON: &[u8] =
+    include_bytes!("../res/icons/hicolor/16x16/apps/jump-backward-10-symbolic.svg");
+
+const JUMP_FORWARD_ICON: &[u8] =
+    include_bytes!("../res/icons/hicolor/16x16/apps/jump-forward-10-symbolic.svg");
+
 use std::error::Error;
 
 fn language_name(code: &str) -> Option<String> {
@@ -1860,7 +1866,7 @@ impl Application for App {
                         .map_or(true, |video| video.has_video())
                     {
                         widget::button::icon(
-                            widget::icon::from_name("jump-backward-10-symbolic").size(16),
+                            widget::icon::from_svg_bytes(JUMP_BACKWARD_ICON).symbolic(true),
                         )
                         .on_press(Message::SeekRelative(-10.0))
                     } else {
@@ -1888,7 +1894,7 @@ impl Application for App {
                     .map_or(true, |video| video.has_video())
                 {
                     widget::button::icon(
-                        widget::icon::from_name("jump-forward-10-symbolic").size(16),
+                        widget::icon::from_svg_bytes(JUMP_FORWARD_ICON).symbolic(true),
                     )
                     .on_press(Message::SeekRelative(10.0))
                 } else {
