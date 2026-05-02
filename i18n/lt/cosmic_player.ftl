@@ -1,5 +1,5 @@
 quit = Išeiti
-settings = Nustatymai
+settings = Nuostatos
 close-file = Uždaryti failą
 match-desktop = Pagal darbalaukio temą
 appearance = Išvaizda
