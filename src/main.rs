@@ -1,49 +1,32 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    action,
-    app::{Core, Settings, Task},
-    command::set_theme,
-    cosmic_config::{self, CosmicConfigEntry},
-    cosmic_theme, executor, font,
-    iced::{
-        event::{self, Event},
-        keyboard::{Event as KeyEvent, Key, Modifiers},
-        mouse::{Event as MouseEvent, ScrollDelta},
-        window::{self, set_mode},
-        Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
-    },
-    theme,
-    widget::{self, menu::action::MenuAction, nav_bar, segmented_button, Slider},
-    Application, ApplicationExt, Element,
+use cosmic::app::{Core, Settings, Task};
+use cosmic::command::set_theme;
+use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::iced::event::{self, Event};
+use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
+use cosmic::iced::mouse::{Event as MouseEvent, ScrollDelta};
+use cosmic::iced::window::{self, set_mode};
+use cosmic::iced::{
+    Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
 };
-use iced_video_player::{
-    gst::{self, prelude::*},
-    gst_pbutils, Video, VideoPlayer,
-};
-use std::{
-    any::TypeId,
-    collections::HashMap,
-    ffi::{CStr, CString},
-    fs,
-    path::{Path, PathBuf},
-    process,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread,
-    time::{Duration, Instant},
-};
+use cosmic::widget::menu::action::MenuAction;
+use cosmic::widget::{self, Slider, nav_bar, segmented_button};
+use cosmic::{Application, ApplicationExt, Element, action, cosmic_theme, executor, font, theme};
+use iced_video_player::gst::prelude::*;
+use iced_video_player::{Video, VideoPlayer, gst, gst_pbutils};
+use std::any::TypeId;
+use std::collections::HashMap;
+use std::ffi::{CStr, CString};
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use std::{fs, process, thread};
 use tokio::sync::mpsc;
 
-use crate::{
-    config::{Config, ConfigState, CONFIG_VERSION, RepeatState},
-    key_bind::{key_binds, KeyBind},
-    mpris::subscription,
-    project::ProjectNode,
-};
+use crate::config::{CONFIG_VERSION, Config, ConfigState, RepeatState};
+use crate::key_bind::{KeyBind, key_binds};
+use crate::project::ProjectNode;
 
 mod argparse;
 mod config;
@@ -622,10 +605,10 @@ impl App {
     }
 
     fn save_config_state(&mut self) {
-        if let Some(ref config_state_handler) = self.flags.config_state_handler {
-            if let Err(err) = self.flags.config_state.write_entry(config_state_handler) {
-                log::error!("failed to save config_state: {}", err);
-            }
+        if let Some(ref config_state_handler) = self.flags.config_state_handler
+            && let Err(err) = self.flags.config_state.write_entry(config_state_handler)
+        {
+            log::error!("failed to save config_state: {}", err);
         }
     }
 
@@ -634,9 +617,9 @@ impl App {
             || !self
                 .video_opt
                 .as_ref()
-                .map_or(false, |video| video.has_video())
+                .is_some_and(|video| video.has_video())
         {
-            self.core.window.show_headerbar = true && !self.fullscreen;
+            self.core.window.show_headerbar = !self.fullscreen;
             self.controls = true;
             self.controls_time = Instant::now();
         } else if self.controls && self.controls_time.elapsed() > CONTROLS_TIMEOUT {
@@ -690,7 +673,7 @@ impl App {
             ..Default::default()
         };
         //TODO: use any other stream tags?
-        if let Some(tags) = self.audio_tags.get(0) {
+        if let Some(tags) = self.audio_tags.first() {
             log::info!("{:#?}", tags);
             if let Some(tag) = tags.get::<gst::tags::Album>() {
                 new.album = tag.get().into();
@@ -763,11 +746,11 @@ impl App {
                 new.album_art_opt = url::Url::from_file_path(album_art.path()).ok();
             }
         }
-        if let Some((old, _, tx)) = &mut self.mpris_opt {
-            if new != *old {
-                *old = new.clone();
-                let _ = tx.send(MprisEvent::Meta(new.clone()));
-            }
+        if let Some((old, _, tx)) = &mut self.mpris_opt
+            && new != *old
+        {
+            *old = new.clone();
+            let _ = tx.send(MprisEvent::Meta(new.clone()));
         }
         self.mpris_meta = new;
     }
@@ -962,7 +945,7 @@ impl Application for App {
 
     fn on_escape(&mut self) -> Task<Self::Message> {
         if self.fullscreen {
-            return self.update(Message::Fullscreen);
+            self.update(Message::Fullscreen)
         } else {
             Task::none()
         }
@@ -1221,12 +1204,12 @@ impl Application for App {
                 }
             }
             Message::AudioCode(code) => {
-                if let Ok(code) = i32::try_from(code) {
-                    if let Some(video) = &self.video_opt {
-                        let pipeline = video.pipeline();
-                        pipeline.set_property("current-audio", code);
-                        self.current_audio = pipeline.property("current-audio");
-                    }
+                if let Ok(code) = i32::try_from(code)
+                    && let Some(video) = &self.video_opt
+                {
+                    let pipeline = video.pipeline();
+                    pipeline.set_property("current-audio", code);
+                    self.current_audio = pipeline.property("current-audio");
                 }
             }
             Message::AudioToggle => {
@@ -1236,12 +1219,12 @@ impl Application for App {
                 }
             }
             Message::AudioVolume(volume) => {
-                if let Some(video) = &mut self.video_opt {
-                    if volume >= 0.0 && volume <= 1.0 {
-                        video.set_volume(volume);
-                        video.set_muted(false);
-                        self.update_controls(true);
-                    }
+                if let Some(video) = &mut self.video_opt
+                    && (0.0..=1.0).contains(&volume)
+                {
+                    video.set_volume(volume);
+                    video.set_muted(false);
+                    self.update_controls(true);
                 }
             }
             Message::TextCode(index) => {
@@ -1324,7 +1307,7 @@ impl Application for App {
                         }
                     }
 
-                    if (volume >= 0.0 && volume <= 1.0) && !nav_bar_toggled {
+                    if (0.0..=1.0).contains(&volume) && !nav_bar_toggled {
                         video.set_volume(volume);
                         video.set_muted(false);
                         self.update_controls(true);
@@ -1597,20 +1580,20 @@ impl Application for App {
                 self.update_mpris_state();
             }
             Message::NewFrame => {
-                if let Some(video) = &mut self.video_opt {
-                    if !self.dragging {
-                        self.position = video.position().as_secs_f64();
+                if let Some(video) = &mut self.video_opt
+                    && !self.dragging
+                {
+                    self.position = video.position().as_secs_f64();
 
-                        if let Some((a, b)) = self.ab_repeat {
-                            let target_a = a.unwrap_or(0.0);
-                            let target_b = b.unwrap_or(self.duration);
-                            if self.position >= target_b {
-                                let _ = video.seek(Duration::from_secs_f64(target_a), true);
-                            }
+                    if let Some((a, b)) = self.ab_repeat {
+                        let target_a = a.unwrap_or(0.0);
+                        let target_b = b.unwrap_or(self.duration);
+                        if self.position >= target_b {
+                            let _ = video.seek(Duration::from_secs_f64(target_a), true);
                         }
-
-                        self.update_controls(self.dropdown_opt.is_some());
                     }
+
+                    self.update_controls(self.dropdown_opt.is_some());
                 }
             }
             Message::Reload => {

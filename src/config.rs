@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    cosmic_config::{self, CosmicConfigEntry, cosmic_config_derive::CosmicConfigEntry},
-    theme,
-};
+use cosmic::cosmic_config::cosmic_config_derive::CosmicConfigEntry;
+use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::theme;
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, path::PathBuf};
+use std::collections::VecDeque;
+use std::path::PathBuf;
 
 pub const CONFIG_VERSION: u64 = 1;
 

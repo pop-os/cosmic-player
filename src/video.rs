@@ -1,10 +1,8 @@
-use iced_video_player::{
-    Video,
-    gst::{self, prelude::*},
-    gst_app, gst_pbutils,
-};
+use iced_video_player::gst::prelude::*;
+use iced_video_player::{Video, gst, gst_app, gst_pbutils};
 
-use cosmic::{action, app::Task};
+use cosmic::action;
+use cosmic::app::Task;
 
 #[derive(Debug, Default)]
 pub struct VideoSettings {
@@ -33,13 +31,13 @@ pub fn new_video(
         let Ok(elem) = vals[1].get::<gst::Element>() else {
             return None;
         };
-        if let Some(factory) = elem.factory() {
-            if factory.name() == "souphttpsrc" {
-                elem.set_property(
-                    "user-agent",
-                    "Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0",
-                );
-            }
+        if let Some(factory) = elem.factory()
+            && factory.name() == "souphttpsrc"
+        {
+            elem.set_property(
+                "user-agent",
+                "Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0",
+            );
         }
         None
     });
@@ -65,18 +63,15 @@ pub fn new_video(
                 .unwrap()
                 .pop_filtered(&[gst::MessageType::Element])
             {
-                match msg.view() {
-                    gst::MessageView::Element(element) => {
-                        if gst_pbutils::MissingPluginMessage::is(&element) {
-                            commands.push(Task::perform(
-                                async { action::app(super::Message::MissingPlugin(msg)) },
-                                |x| x,
-                            ));
-                            // Do one codec install at a time
-                            break;
-                        }
-                    }
-                    _ => {}
+                if let gst::MessageView::Element(element) = msg.view()
+                    && gst_pbutils::MissingPluginMessage::is(element)
+                {
+                    commands.push(Task::perform(
+                        async { action::app(super::Message::MissingPlugin(msg)) },
+                        |x| x,
+                    ));
+                    // Do one codec install at a time
+                    break;
                 }
             }
             pipeline.set_state(gst::State::Null).unwrap();

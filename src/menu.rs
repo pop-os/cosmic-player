@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::{
-    theme,
-    widget::{
-        menu::{self, key_bind::KeyBind, ItemHeight, ItemWidth, MenuBar},
-        RcElementWrapper,
-    },
-    Element,
-};
-use std::{collections::HashMap, path::PathBuf};
+use cosmic::widget::RcElementWrapper;
+use cosmic::widget::menu::key_bind::KeyBind;
+use cosmic::widget::menu::{self, ItemHeight, ItemWidth, MenuBar};
+use cosmic::{Element, theme};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use crate::{Action, Config, ConfigState, Message, fl};
 
@@ -22,10 +19,10 @@ pub fn menu_bar<'a>(
 ) -> Element<'a, Message> {
     let home_dir_opt = std::env::home_dir();
     let format_path = |path: &PathBuf| -> String {
-        if let Some(home_dir) = &home_dir_opt {
-            if let Ok(part) = path.strip_prefix(home_dir) {
-                return format!("~/{}", part.display());
-            }
+        if let Some(home_dir) = &home_dir_opt
+            && let Ok(part) = path.strip_prefix(home_dir)
+        {
+            return format!("~/{}", part.display());
         }
         path.display().to_string()
     };
