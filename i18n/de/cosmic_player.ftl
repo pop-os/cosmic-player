@@ -46,3 +46,6 @@ ab-repeat = A-B-Wiederholung
 ab-repeat-set-a = A-B-Wiederholung (A)
 ab-repeat-set-b = A-B-Wiederholung (B)
 ab-repeat-clear = A-B-Wiederholung löschen
+xdg-keywords = Audio;Film;Musik;Ton;Video;
+xdg-name = COSMIC Mediaplayer
+xdg-comment = Mediaplayer für den COSMIC-Desktop

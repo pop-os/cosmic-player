@@ -1,0 +1,2 @@
+quit = Surt
+settings = Configuració

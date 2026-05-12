@@ -31,3 +31,6 @@ ab-repeat = Қайталау А-Ә
 ab-repeat-set-a = Қайталау А-Ә (А бапт.)
 ab-repeat-set-b = Қайталау А-Ә (В бапт.)
 ab-repeat-clear = Қайталау А-Ә (Тазарту)
+xdg-name = COSMIC медиаплеері
+xdg-comment = COSMIC жұмыс үстелі үшін медиаплеері
+xdg-keywords = Audio;Film;Movie;Music;Sound;Video;Аудио;Фильм;Кино;Музыка;Дыбыс;Видео;

@@ -35,5 +35,5 @@ ab-repeat-clear = Vymazat opakování A-B
 # XDG Metadata
 
 xdg-name = Přehrávač médií COSMIC
-xdg-comment = Přehrávač médií pro pracovní prostředí COSMIC
-xdg-keywords = audio;film;hudba;video;média;zvuk;
+xdg-comment = Přehrávač médií pro prostředí COSMIC
+xdg-keywords = Audio;Film;Hudba;Zvuk;Video;

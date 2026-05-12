@@ -46,3 +46,6 @@ ab-repeat-clear = 清除 A-B 重複
 playback = 回放
 next-frame = 下一幀
 previous-frame = 上一幀
+xdg-name = COSMIC 媒體播放器
+xdg-comment = 媒體播放器 用於 COSMIC 桌面
+xdg-keywords = 音訊;影片;電影;音樂;聲音;影像;
