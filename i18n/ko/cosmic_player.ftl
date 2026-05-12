@@ -23,3 +23,5 @@ off = 끄기
 album = 앨범: { $album }
 close-file = 파일 닫기
 repeat-disabled = 반복 비활성화
+previous-frame = 이전 프레임
+next-frame = 다음 프레임

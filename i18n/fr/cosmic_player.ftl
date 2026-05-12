@@ -46,3 +46,6 @@ ab-repeat = Répétition A-B
 ab-repeat-set-a = Répétition A-B (A)
 ab-repeat-set-b = Répétition A-B (B)
 ab-repeat-clear = Effacer la répétition A-B
+xdg-name = Lecteur Multimédia COSMIC
+xdg-comment = Lecteur Multimédia pour le bureau COSMIC
+xdg-keywords = Audio;Film;Musique;Son;Vidéo;
