@@ -1819,7 +1819,7 @@ impl Application for App {
                         //TODO: move style to libcosmic
                         .class(theme::Container::custom(|theme| {
                             let cosmic = theme.cosmic();
-                            let component = &cosmic.background.component;
+                            let component = &cosmic.background(theme.transparent).component;
                             widget::container::Style {
                                 icon_color: Some(component.on.into()),
                                 text_color: Some(component.on.into()),
