@@ -46,3 +46,6 @@ ab-repeat = Athsheinm A-B
 ab-repeat-set-a = Athsheinm A-B (A)
 ab-repeat-set-b = Athsheinm A-B (B)
 ab-repeat-clear = Glan Athsheinm A-B
+xdg-name = Imreoir Meán COSMIC
+xdg-comment = Seinnteoir meán don deasc COSMIC
+xdg-keywords = Fuaim;Scannán;Scannán;Ceol;Fuaim;Físeán;

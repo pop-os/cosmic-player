@@ -1,6 +1,6 @@
 album = Album: { $album }
 audio = Hang
-no-video-or-audio-file-open = Nincs videó- vagy hangfájl megnyitva
+no-video-or-audio-file-open = Nincs megnyitva videó- vagy hangfájl
 open-file = Fájl megnyitása
 open-folder = Mappa megnyitása
 subtitles = Feliratok
