@@ -5,6 +5,7 @@ use cosmic::app::{Core, Settings, Task};
 use cosmic::command::set_theme;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::event::{self, Event};
+use cosmic::iced::keyboard::key::Physical;
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 use cosmic::iced::mouse::{Event as MouseEvent, ScrollDelta};
 use cosmic::iced::window::{self, set_mode};
@@ -288,7 +289,7 @@ pub enum Message {
     FolderOpenRecent(usize),
     MultipleLoad(Vec<url::Url>),
     Fullscreen,
-    Key(Modifiers, Key),
+    Key(Modifiers, Physical, Key),
     AudioCode(usize),
     AudioToggle,
     AudioVolume(f64),
@@ -1196,9 +1197,9 @@ impl Application for App {
                     );
                 }
             }
-            Message::Key(modifiers, key) => {
+            Message::Key(modifiers, physical, key) => {
                 for (key_bind, action) in self.key_binds.iter() {
-                    if key_bind.matches(modifiers, &key) {
+                    if key_bind.matches(modifiers, &key, Some(&physical)) {
                         return self.update(action.message());
                     }
                 }
@@ -2010,9 +2011,12 @@ impl Application for App {
 
         let mut subscriptions = vec![
             event::listen_with(|event, _status, _window_id| match event {
-                Event::Keyboard(KeyEvent::KeyPressed { key, modifiers, .. }) => {
-                    Some(Message::Key(modifiers, key))
-                }
+                Event::Keyboard(KeyEvent::KeyPressed {
+                    modifiers,
+                    physical_key,
+                    key,
+                    ..
+                }) => Some(Message::Key(modifiers, physical_key, key)),
                 Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
                 Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Scrolled(delta)),
                 _ => None,
