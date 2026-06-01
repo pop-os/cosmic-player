@@ -54,6 +54,9 @@ const JUMP_BACKWARD_ICON: &[u8] =
 const JUMP_FORWARD_ICON: &[u8] =
     include_bytes!("../res/icons/hicolor/16x16/apps/jump-forward-10-symbolic.svg");
 
+const PLAYBACK_SPEED_ICON: &[u8] =
+    include_bytes!("../res/icons/hicolor/16x16/apps/playback-speed-symbolic.svg");
+
 use std::error::Error;
 
 fn language_name(code: &str) -> Option<String> {
@@ -226,6 +229,7 @@ pub struct Flags {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DropdownKind {
     Audio,
+    Speed,
     Subtitle,
 }
 
@@ -312,6 +316,8 @@ pub enum Message {
     NewFrame,
     Reload,
     AbRepeat,
+    VideoAreaClick,
+    PlaybackSpeed(f64),
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
@@ -342,6 +348,7 @@ pub struct App {
     text_codes: Vec<TextCode>,
     current_text: Option<i32>,
     ab_repeat: Option<(Option<f64>, Option<f64>)>,
+    playback_speed: f64,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
 }
@@ -456,6 +463,9 @@ impl App {
         self.set_looping_from_repeat_state();
         self.update_flags();
         self.update_mpris_meta();
+        if self.playback_speed != 1.0 {
+            self.apply_playback_speed();
+        }
         self.update_title()
     }
 
@@ -848,6 +858,22 @@ impl App {
             video.set_looping(self.flags.config_state.player_state.repeat == RepeatState::Track);
         }
     }
+
+    fn apply_playback_speed(&self) {
+        let Some(video) = &self.video_opt else { return };
+        let pipeline = video.pipeline();
+        let position = gst::ClockTime::from_nseconds(video.position().as_nanos() as u64);
+        if let Err(err) = pipeline.seek(
+            self.playback_speed,
+            gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
+            gst::SeekType::Set,
+            position,
+            gst::SeekType::None,
+            gst::ClockTime::NONE,
+        ) {
+            log::warn!("failed to set playback speed {}: {}", self.playback_speed, err);
+        }
+    }
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -907,6 +933,7 @@ impl Application for App {
             text_codes: Vec::new(),
             current_text: None,
             ab_repeat: None,
+            playback_speed: 1.0,
             #[cfg(feature = "xdg-portal")]
             inhibit,
         };
@@ -1481,6 +1508,19 @@ impl Application for App {
                     self.update_controls(true);
                 }
             }
+            Message::PlaybackSpeed(speed) => {
+                self.playback_speed = speed;
+                self.dropdown_opt = None;
+                self.apply_playback_speed();
+                self.update_controls(true);
+            }
+            Message::VideoAreaClick => {
+                if self.dropdown_opt.is_some() {
+                    self.dropdown_opt = None;
+                } else {
+                    return self.update(Message::PlayPause);
+                }
+            }
             Message::AbRepeat => {
                 let current_opt = self.video_opt.as_ref().map(|v| v.position().as_secs_f64());
                 if let Some(current) = current_opt {
@@ -1742,7 +1782,7 @@ impl Application for App {
         }
 
         let mouse_area = widget::mouse_area(video_player)
-            .on_press(Message::PlayPause)
+            .on_press(Message::VideoAreaClick)
             .on_double_press(Message::Fullscreen);
 
         let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
@@ -1779,6 +1819,61 @@ impl Application for App {
                         .into(),
                     );
                 }
+                DropdownKind::Speed => {
+                    for &speed in &[0.75f64, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25] {
+                        let s = format!("{:.2}", speed);
+                        let speed_str = format!(
+                            "{}x",
+                            s.trim_end_matches('0').trim_end_matches('.')
+                        );
+                        let is_active = (self.playback_speed - speed).abs() < 0.01;
+
+                        let icon: Element<_> = if is_active {
+                            widget::icon::from_name("object-select-symbolic")
+                                .size(16)
+                                .into()
+                        } else {
+                            widget::container(widget::space::horizontal())
+                                .width(Length::Fixed(16.0))
+                                .into()
+                        };
+
+                        let label: Element<_> = if is_active {
+                            widget::text(speed_str).font(font::bold()).into()
+                        } else {
+                            widget::text(speed_str).into()
+                        };
+
+                        let row_content = widget::row::with_children(vec![icon, label])
+                            .spacing(space_xs)
+                            .align_y(Alignment::Center);
+
+                        let content: Element<_> = if is_active {
+                            widget::container(row_content)
+                                .class(theme::Container::custom(|theme| {
+                                    let accent: Color =
+                                        theme.cosmic().accent_color().into();
+                                    widget::container::Style {
+                                        icon_color: Some(accent),
+                                        text_color: Some(accent),
+                                        ..Default::default()
+                                    }
+                                }))
+                                .into()
+                        } else {
+                            row_content.into()
+                        };
+
+                        items.push(
+                            widget::button::custom(content)
+                                .width(Length::Fill)
+                                .padding([12.0f32, 8.0f32])
+                                .class(theme::Button::MenuItem)
+                                .on_press(Message::PlaybackSpeed(speed))
+                                .into(),
+                        );
+                    }
+                }
                 DropdownKind::Subtitle => {
                     if !self.audio_codes.is_empty() {
                         items.push(widget::text::heading(fl!("audio")).into());
@@ -1807,34 +1902,42 @@ impl Application for App {
                 }
             }
 
+            let use_padding = !matches!(dropdown, DropdownKind::Speed);
             let mut column = widget::column::with_capacity(items.len());
             for item in items {
-                column = column.push(widget::container(item).padding([space_xxs, space_m]));
+                column = column.push(if use_padding {
+                    widget::container(item).padding([space_xxs, space_m]).into()
+                } else {
+                    item
+                });
             }
 
             popup_items.push(
                 widget::row::with_children(vec![
                     widget::space::horizontal().into(),
-                    widget::container(column)
-                        .padding(1)
-                        //TODO: move style to libcosmic
-                        .class(theme::Container::custom(|theme| {
-                            let cosmic = theme.cosmic();
-                            let component = &cosmic.background.component;
-                            widget::container::Style {
-                                icon_color: Some(component.on.into()),
-                                text_color: Some(component.on.into()),
-                                background: Some(Background::Color(component.base.into())),
-                                border: Border {
-                                    radius: 8.0.into(),
-                                    width: 1.0,
-                                    color: component.divider.into(),
-                                },
-                                ..Default::default()
-                            }
-                        }))
-                        .width(Length::Fixed(240.0))
-                        .into(),
+                    widget::mouse_area(
+                        widget::container(column)
+                            .padding(1)
+                            //TODO: move style to libcosmic
+                            .class(theme::Container::custom(|theme| {
+                                let cosmic = theme.cosmic();
+                                let component = &cosmic.background.component;
+                                widget::container::Style {
+                                    icon_color: Some(component.on.into()),
+                                    text_color: Some(component.on.into()),
+                                    background: Some(Background::Color(component.base.into())),
+                                    border: Border {
+                                        radius: 8.0.into(),
+                                        width: 1.0,
+                                        color: component.divider.into(),
+                                    },
+                                    ..Default::default()
+                                }
+                            }))
+                            .width(Length::Fixed(240.0)),
+                    )
+                    .on_press(Message::ShowControls)
+                    .into(),
                 ])
                 .into(),
             );
@@ -1932,6 +2035,12 @@ impl Application for App {
                 )
                 .push(
                     widget::button::icon(
+                        widget::icon::from_svg_bytes(PLAYBACK_SPEED_ICON).symbolic(true),
+                    )
+                    .on_press(Message::DropdownToggle(DropdownKind::Speed)),
+                )
+                .push(
+                    widget::button::icon(
                         widget::icon::from_name("view-fullscreen-symbolic").size(16),
                     )
                     .on_press(Message::Fullscreen),
@@ -1957,31 +2066,37 @@ impl Application for App {
                     .on_press(Message::DropdownToggle(DropdownKind::Audio)),
                 );
             popup_items.push(
-                widget::container(row)
-                    .padding([space_xxs, space_xs])
-                    .class(theme::Container::WindowBackground)
-                    .into(),
+                widget::mouse_area(
+                    widget::container(row)
+                        .padding([space_xxs, space_xs])
+                        .class(theme::Container::WindowBackground),
+                )
+                .on_press(Message::ShowControls)
+                .into(),
             );
 
             if self.core.is_condensed() {
                 popup_items.push(
-                    widget::container(
-                        widget::row::with_capacity(3)
-                            .align_y(Alignment::Center)
-                            .spacing(space_xxs)
-                            .push(widget::text(format_time(self.position)).font(font::mono()))
-                            .push(
-                                Slider::new(0.0..=self.duration, self.position, Message::Seek)
-                                    .step(0.1)
-                                    .on_release(Message::SeekRelease),
-                            )
-                            .push(
-                                widget::text(format_time(self.duration - self.position))
-                                    .font(font::mono()),
-                            ),
+                    widget::mouse_area(
+                        widget::container(
+                            widget::row::with_capacity(3)
+                                .align_y(Alignment::Center)
+                                .spacing(space_xxs)
+                                .push(widget::text(format_time(self.position)).font(font::mono()))
+                                .push(
+                                    Slider::new(0.0..=self.duration, self.position, Message::Seek)
+                                        .step(0.1)
+                                        .on_release(Message::SeekRelease),
+                                )
+                                .push(
+                                    widget::text(format_time(self.duration - self.position))
+                                        .font(font::mono()),
+                                ),
+                        )
+                        .padding([space_xxs, space_xs])
+                        .class(theme::Container::WindowBackground),
                     )
-                    .padding([space_xxs, space_xs])
-                    .class(theme::Container::WindowBackground)
+                    .on_press(Message::ShowControls)
                     .into(),
                 );
             }

@@ -27,6 +27,11 @@ pub fn new_video(
         .downcast::<gst::Pipeline>()
         .map_err(|_| iced_video_player::Error::Cast)
         .unwrap();
+    if let Ok(scaletempo) = gst::ElementFactory::make("scaletempo").build() {
+        pipeline.set_property("audio-filter", &scaletempo);
+    } else {
+        log::warn!("scaletempo element not available; speed changes will affect pitch");
+    }
     pipeline.connect("element-setup", false, |vals| {
         let Ok(elem) = vals[1].get::<gst::Element>() else {
             return None;
