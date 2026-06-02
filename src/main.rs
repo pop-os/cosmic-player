@@ -464,7 +464,9 @@ impl App {
         self.update_flags();
         self.update_mpris_meta();
         if self.playback_speed != 1.0 {
-            self.apply_playback_speed();
+            if let Some(video) = &mut self.video_opt {
+                Self::apply_speed(video, self.playback_speed);
+            }
         }
         self.update_title()
     }
@@ -859,19 +861,9 @@ impl App {
         }
     }
 
-    fn apply_playback_speed(&self) {
-        let Some(video) = &self.video_opt else { return };
-        let pipeline = video.pipeline();
-        let position = gst::ClockTime::from_nseconds(video.position().as_nanos() as u64);
-        if let Err(err) = pipeline.seek(
-            self.playback_speed,
-            gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE,
-            gst::SeekType::Set,
-            position,
-            gst::SeekType::None,
-            gst::ClockTime::NONE,
-        ) {
-            log::warn!("failed to set playback speed {}: {}", self.playback_speed, err);
+    fn apply_speed(video: &mut Video, speed: f64) {
+        if let Err(err) = video.set_speed(speed) {
+            log::warn!("failed to set playback speed {}: {}", speed, err);
         }
     }
 }
@@ -1511,7 +1503,9 @@ impl Application for App {
             Message::PlaybackSpeed(speed) => {
                 self.playback_speed = speed;
                 self.dropdown_opt = None;
-                self.apply_playback_speed();
+                if let Some(video) = &mut self.video_opt {
+                    Self::apply_speed(video, speed);
+                }
                 self.update_controls(true);
             }
             Message::VideoAreaClick => {
