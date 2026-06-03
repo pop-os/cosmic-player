@@ -1350,10 +1350,9 @@ impl Application for App {
             }
             Message::SeekRelative(secs) => {
                 if let Some(video) = &mut self.video_opt {
-                    self.position = video.position().as_secs_f64();
-                    let duration =
-                        Duration::try_from_secs_f64(self.position + secs).unwrap_or_default();
-                    video.seek(duration, true).expect("seek");
+                    self.position = (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
+                    let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                    video.seek(target, true).expect("seek");
                 }
             }
             Message::SeekRelease => {
