@@ -1350,7 +1350,8 @@ impl Application for App {
             }
             Message::SeekRelative(secs) => {
                 if let Some(video) = &mut self.video_opt {
-                    self.position = (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
+                    self.position =
+                        (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
                 }
@@ -1474,13 +1475,19 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt
                     && video.has_video()
                 {
+                    video.set_paused(true);
                     video.pipeline().send_event(gst::event::Step::new(
                         gst::format::Buffers::from_u64(1),
                         1.0,
                         true,
                         false,
                     ));
-                    video.set_paused(true);
+
+                    let fps = get_framerate(video).unwrap_or(30.0);
+                    let frame_duration = Duration::from_secs_f64(1.0 / fps);
+
+                    self.position = (video.position().as_secs_f64() + frame_duration.as_secs_f64())
+                        .clamp(0.0, self.duration);
                     self.update_controls(true);
                 }
             }
@@ -1489,13 +1496,15 @@ impl Application for App {
                     && video.has_video()
                 {
                     // TODO: Improve Accuracy.
+                    video.set_paused(true);
+
                     let current = video.position();
                     let fps = get_framerate(video).unwrap_or(30.0);
                     let frame_duration = Duration::from_secs_f64(1.0 / fps);
                     let target = current.saturating_sub(frame_duration + Duration::from_millis(1));
 
+                    self.position = target.as_secs_f64().clamp(0.0, self.duration);
                     video.seek(target, true).expect("seek");
-                    video.set_paused(true);
                     self.update_controls(true);
                 }
             }
@@ -1815,10 +1824,8 @@ impl Application for App {
                 DropdownKind::Speed => {
                     for &speed in &[0.75f64, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25] {
                         let s = format!("{:.2}", speed);
-                        let speed_str = format!(
-                            "{}x",
-                            s.trim_end_matches('0').trim_end_matches('.')
-                        );
+                        let speed_str =
+                            format!("{}x", s.trim_end_matches('0').trim_end_matches('.'));
                         let is_active = (self.playback_speed - speed).abs() < 0.01;
 
                         let icon: Element<_> = if is_active {
@@ -1844,8 +1851,7 @@ impl Application for App {
                         let content: Element<_> = if is_active {
                             widget::container(row_content)
                                 .class(theme::Container::custom(|theme| {
-                                    let accent: Color =
-                                        theme.cosmic().accent_color().into();
+                                    let accent: Color = theme.cosmic().accent_color().into();
                                     widget::container::Style {
                                         icon_color: Some(accent),
                                         text_color: Some(accent),
