@@ -17,7 +17,7 @@ settings = الإعدادات
 ### Appearance
 
 appearance = المظهر
-theme = النسق
+theme = السمة
 match-desktop = طابق سطح المكتب
 dark = داكن
 light = فاتح
@@ -34,7 +34,7 @@ close-file = أغلِق الملف
 open-media-folder = افتح مجلَّد الوسائط...
 open-recent-media-folder = افتح مجلِّد الوسائط الحديثة
 close-media-folder = أغلِق مجلد الوسائط
-quit = أنهِ
+quit = إنهِ
 off = معطّل
 clear-recent = امحُ القائمة الحديثة
 repeat-disabled = التكرار مُعطَّل
