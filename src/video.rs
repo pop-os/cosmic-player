@@ -4,6 +4,40 @@ use iced_video_player::{Video, gst, gst_app, gst_pbutils};
 use cosmic::action;
 use cosmic::app::Task;
 
+const SUSPICIOUS_AUDIO_GAP_DURATION: gst::ClockTime = gst::ClockTime::SECOND;
+
+fn is_suspicious_audio_gap(duration: Option<gst::ClockTime>) -> bool {
+    duration.is_some_and(|duration| duration >= SUSPICIOUS_AUDIO_GAP_DURATION)
+}
+
+fn suppress_suspicious_audio_gaps(audio_filter: &gst::Element) {
+    let Some(src_pad) = audio_filter.static_pad("src") else {
+        log::warn!("audio filter has no source pad; malformed audio gaps will not be suppressed");
+        return;
+    };
+
+    let _ = src_pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, |_, info| {
+        let Some(event) = info.event() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::EventView::Gap(gap) = event.view() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let (timestamp, duration) = gap.get();
+        if !is_suspicious_audio_gap(duration) {
+            return gst::PadProbeReturn::Ok;
+        }
+
+        // Some malformed MP4 edit lists cause streamsynchronizer to emit a
+        // long GAP before almost every audio buffer. The next buffer's PTS is
+        // still continuous, so forwarding those events makes audio sinks
+        // repeatedly wait or resynchronise and produces choppy playback.
+        log::debug!("suppressing audio GAP at {timestamp} with duration {duration:?}");
+        drop(info.take_event());
+        gst::PadProbeReturn::Handled
+    });
+}
+
 #[derive(Debug, Default)]
 pub struct VideoSettings {
     pub mute: bool,
@@ -27,11 +61,14 @@ pub fn new_video(
         .downcast::<gst::Pipeline>()
         .map_err(|_| iced_video_player::Error::Cast)
         .unwrap();
-    if let Ok(scaletempo) = gst::ElementFactory::make("scaletempo").build() {
-        pipeline.set_property("audio-filter", &scaletempo);
-    } else {
-        log::warn!("scaletempo element not available; speed changes will affect pitch");
-    }
+    let audio_filter = gst::ElementFactory::make("scaletempo")
+        .build()
+        .unwrap_or_else(|_| {
+            log::warn!("scaletempo element not available; speed changes will affect pitch");
+            gst::ElementFactory::make("identity").build().unwrap()
+        });
+    suppress_suspicious_audio_gaps(&audio_filter);
+    pipeline.set_property("audio-filter", &audio_filter);
     pipeline.connect("element-setup", false, |vals| {
         let Ok(elem) = vals[1].get::<gst::Element>() else {
             return None;
@@ -82,5 +119,27 @@ pub fn new_video(
             pipeline.set_state(gst::State::Null).unwrap();
             Err(Task::batch(commands))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_suspicious_audio_gap;
+    use iced_video_player::gst;
+
+    #[test]
+    fn long_audio_gap_is_suspicious() {
+        assert!(is_suspicious_audio_gap(Some(gst::ClockTime::SECOND)));
+        assert!(is_suspicious_audio_gap(Some(
+            gst::ClockTime::from_seconds(3)
+        )));
+    }
+
+    #[test]
+    fn short_or_unknown_audio_gap_is_preserved() {
+        assert!(!is_suspicious_audio_gap(Some(
+            gst::ClockTime::from_mseconds(999)
+        )));
+        assert!(!is_suspicious_audio_gap(None));
     }
 }

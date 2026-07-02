@@ -32,8 +32,7 @@ env_logger = "0.11"
 log = "0.4"
 
 [dependencies.iced_video_player]
-git = "https://github.com/wash2/iced_video_player.git"
-branch = "iced-rebase"
+path = "iced_video_player"
 default-features = false
 
 [dependencies.libcosmic]
