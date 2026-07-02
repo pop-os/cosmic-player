@@ -893,6 +893,7 @@ impl Application for App {
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
         core.window.content_container = false;
+        core.window.transparent_header = true;
 
         #[cfg(feature = "xdg-portal")]
         let inhibit = {
@@ -1034,11 +1035,12 @@ impl Application for App {
         // This ensures we have a solid background color even when using no content container
 
         let theme = self.core.system_theme();
+        let bg = theme.cosmic().background(theme.transparent);
 
         Some(cosmic::iced::core::theme::Style {
-            background_color: theme.cosmic().bg_color().into(),
-            icon_color: theme.cosmic().on_bg_color().into(),
-            text_color: theme.cosmic().on_bg_color().into(),
+            background_color: bg.base.into(),
+            icon_color: bg.on.into(),
+            text_color: bg.on.into(),
         })
     }
 
@@ -1706,7 +1708,6 @@ impl Application for App {
             return widget::container(column)
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .class(theme::Container::WindowBackground)
                 .into();
         };
 
@@ -1727,8 +1728,9 @@ impl Application for App {
         let mut background_color = Color::BLACK;
         let mut text_color_opt = None;
         if !video.has_video() {
-            background_color = theme.cosmic().bg_component_color().into();
-            text_color_opt = Some(Color::from(theme.cosmic().on_bg_component_color()));
+            let bg = theme.cosmic().background(theme.transparent);
+            background_color = bg.base.into();
+            text_color_opt = Some(Color::from(bg.on));
 
             let mut col = widget::column::with_capacity(10);
             col = col.push(widget::space::vertical());
@@ -1920,7 +1922,7 @@ impl Application for App {
                             //TODO: move style to libcosmic
                             .class(theme::Container::custom(|theme| {
                                 let cosmic = theme.cosmic();
-                                let component = &cosmic.background.component;
+                                let component = &cosmic.background(theme.transparent).component;
                                 widget::container::Style {
                                     icon_color: Some(component.on.into()),
                                     text_color: Some(component.on.into()),
