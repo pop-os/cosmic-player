@@ -187,6 +187,7 @@ pub enum Action {
     NextFrame,
     PreviousFrame,
     AbRepeat,
+    AudioToggle,
     WindowClose,
 }
 
@@ -212,6 +213,7 @@ impl MenuAction for Action {
             Self::NextFrame => Message::NextFrame,
             Self::PreviousFrame => Message::PreviousFrame,
             Self::AbRepeat => Message::AbRepeat,
+            Self::AudioToggle => Message::AudioToggle,
             Self::WindowClose => Message::WindowClose,
         }
     }
@@ -321,6 +323,7 @@ pub enum Message {
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
+    Escape,
 }
 
 /// The [`App`] stores application-specific state.
@@ -964,11 +967,7 @@ impl Application for App {
     }
 
     fn on_escape(&mut self) -> Task<Self::Message> {
-        if self.fullscreen {
-            self.update(Message::Fullscreen)
-        } else {
-            Task::none()
-        }
+        self.update(Message::Escape)
     }
 
     fn on_nav_select(&mut self, id: nav_bar::Id) -> Task<Message> {
@@ -1214,6 +1213,19 @@ impl Application for App {
                             window::Mode::Windowed
                         },
                     );
+                }
+            }
+            Message::Escape => {
+                if self.fullscreen {
+                    return self.update(Message::Fullscreen);
+                } else {
+                    if let Some(window_id) = self.core.main_window_id() {
+                        if let Some(video) = &mut self.video_opt {
+                            video.set_paused(true);
+                        }
+
+                        return window::minimize(window_id, true);
+                    }
                 }
             }
             Message::Key(modifiers, physical, key) => {
