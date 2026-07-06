@@ -892,8 +892,7 @@ impl Application for App {
 
     /// Creates the application, and optionally emits command on initialize.
     fn init(mut core: Core, flags: Self::Flags) -> (Self, Task<Self::Message>) {
-        core.window.content_container = false;
-        core.window.transparent_header = true;
+        core.window.border_padding = Some(0);
 
         #[cfg(feature = "xdg-portal")]
         let inhibit = {
@@ -1029,19 +1028,6 @@ impl Application for App {
                 self.update(Message::FolderOpen)
             }
         }
-    }
-
-    fn style(&self) -> Option<cosmic::iced::core::theme::Style> {
-        // This ensures we have a solid background color even when using no content container
-
-        let theme = self.core.system_theme();
-        let bg = theme.cosmic().background(theme.transparent);
-
-        Some(cosmic::iced::core::theme::Style {
-            background_color: bg.base.into(),
-            icon_color: bg.on.into(),
-            text_color: bg.on.into(),
-        })
     }
 
     /// Handle application events here.
@@ -1688,7 +1674,7 @@ impl Application for App {
         };
 
         let Some(video) = &self.video_opt else {
-            //TODO: use space variables
+            // TODO: use space variables
             let column = widget::column::with_capacity(4)
                 .align_x(Alignment::Center)
                 .spacing(24)
@@ -1705,10 +1691,7 @@ impl Application for App {
                 .push(widget::button::suggested(fl!("open-file")).on_press(Message::FileOpen))
                 .push(widget::space::vertical());
 
-            return widget::container(column)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into();
+            return column.into();
         };
 
         let muted = video.muted();
@@ -1729,7 +1712,7 @@ impl Application for App {
         let mut text_color_opt = None;
         if !video.has_video() {
             let bg = theme.cosmic().background(theme.transparent);
-            background_color = bg.base.into();
+            background_color = Color::TRANSPARENT;
             text_color_opt = Some(Color::from(bg.on));
 
             let mut col = widget::column::with_capacity(10);
