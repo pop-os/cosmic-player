@@ -188,6 +188,8 @@ pub enum Action {
     PreviousFrame,
     AbRepeat,
     AudioToggle,
+    VolumeUp,
+    VolumeDown,
     WindowClose,
 }
 
@@ -215,6 +217,8 @@ impl MenuAction for Action {
             Self::AbRepeat => Message::AbRepeat,
             Self::AudioToggle => Message::AudioToggle,
             Self::WindowClose => Message::WindowClose,
+            Self::VolumeUp => Message::AudioVolumeDelta(0.02),
+            Self::VolumeDown => Message::AudioVolumeDelta(-0.02),
         }
     }
 }
@@ -299,6 +303,7 @@ pub enum Message {
     AudioCode(usize),
     AudioToggle,
     AudioVolume(f64),
+    AudioVolumeDelta(f64),
     TextCode(usize),
     Pause,
     Play,
@@ -1243,6 +1248,12 @@ impl Application for App {
                     video.set_volume(volume);
                     video.set_muted(false);
                     self.update_controls(true);
+                }
+            }
+            Message::AudioVolumeDelta(delta) => {
+                if let Some(video) = &mut self.video_opt {
+                    let volume = video.volume();
+                    return self.update(Message::AudioVolume(volume + delta));
                 }
             }
             Message::TextCode(index) => {

@@ -32,7 +32,10 @@ pub fn key_binds() -> HashMap<KeyBind, Action> {
     bind!([], Key::Character(",".into()), PreviousFrame);
     bind!([], Key::Character("a".into()), AbRepeat);
     bind!([], Key::Character("m".into()), AudioToggle);
+    bind!([], Key::Named(Named::ArrowUp), VolumeUp);
+    bind!([], Key::Named(Named::ArrowDown), VolumeDown);
     bind!([], Key::Named(Named::PageUp), PlayPrev);
     bind!([], Key::Named(Named::PageDown), PlayNext);
+
     key_binds
 }
