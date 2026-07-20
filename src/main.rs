@@ -17,6 +17,7 @@ use cosmic::widget::{self, Slider, nav_bar, segmented_button};
 use cosmic::{Application, ApplicationExt, Element, action, cosmic_theme, executor, font, theme};
 use iced_video_player::gst::prelude::*;
 use iced_video_player::{Video, VideoPlayer, gst, gst_pbutils};
+use ordered_float::OrderedFloat;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
@@ -188,8 +189,9 @@ pub enum Action {
     PreviousFrame,
     AbRepeat,
     AudioToggle,
-    VolumeUp,
-    VolumeDown,
+    ChangeVolume(OrderedFloat<f64>),
+    ChangeSpeed(OrderedFloat<f64>),
+    Seek(OrderedFloat<f64>),
     WindowClose,
 }
 
@@ -217,8 +219,9 @@ impl MenuAction for Action {
             Self::AbRepeat => Message::AbRepeat,
             Self::AudioToggle => Message::AudioToggle,
             Self::WindowClose => Message::WindowClose,
-            Self::VolumeUp => Message::AudioVolumeDelta(0.02),
-            Self::VolumeDown => Message::AudioVolumeDelta(-0.02),
+            Self::ChangeVolume(change) => Message::ChangeVolumeRelative(change.into_inner()),
+            Self::ChangeSpeed(change) => Message::ChangeSpeedRelative(change.into_inner()),
+            Self::Seek(value) => Message::SeekPercent(value.into_inner())
         }
     }
 }
@@ -303,7 +306,6 @@ pub enum Message {
     AudioCode(usize),
     AudioToggle,
     AudioVolume(f64),
-    AudioVolumeDelta(f64),
     TextCode(usize),
     Pause,
     Play,
@@ -313,6 +315,9 @@ pub enum Message {
     Seek(f64),
     SeekRelative(f64),
     SeekRelease,
+    ChangeVolumeRelative(f64),
+    ChangeSpeedRelative(f64),
+    SeekPercent(f64),
     PlayPrev,
     PlayNext,
     NextFrame,
@@ -1250,7 +1255,7 @@ impl Application for App {
                     self.update_controls(true);
                 }
             }
-            Message::AudioVolumeDelta(delta) => {
+            Message::ChangeVolumeRelative(delta) => {
                 if let Some(video) = &mut self.video_opt {
                     let volume = video.volume();
                     return self.update(Message::AudioVolume(volume + delta));
@@ -1361,6 +1366,14 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     self.position =
                         (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
+                    let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
+                    video.seek(target, true).expect("seek");
+                }
+            }
+            Message::SeekPercent(float) => {
+                if let Some(video) = &mut self.video_opt {
+                    self.position =
+                        (self.duration * float).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
                 }
@@ -1524,6 +1537,11 @@ impl Application for App {
                     Self::apply_speed(video, speed);
                 }
                 self.update_controls(true);
+            }
+            Message::ChangeSpeedRelative(float) => {
+                if let Some(video) = self.video_opt.as_ref() {
+                    return self.update(Message::PlaybackSpeed(video.speed() + float));
+                }
             }
             Message::VideoAreaClick => {
                 if self.dropdown_opt.is_some() {
