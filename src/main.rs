@@ -189,6 +189,7 @@ pub enum Action {
     PreviousFrame,
     AbRepeat,
     AudioToggle,
+    TextCodeToggle,
     ChangeVolume(OrderedFloat<f64>),
     ChangeSpeed(OrderedFloat<f64>),
     Seek(OrderedFloat<f64>),
@@ -217,11 +218,12 @@ impl MenuAction for Action {
             Self::NextFrame => Message::NextFrame,
             Self::PreviousFrame => Message::PreviousFrame,
             Self::AbRepeat => Message::AbRepeat,
+            Self::TextCodeToggle => Message::TextCodeToggle,
             Self::AudioToggle => Message::AudioToggle,
             Self::WindowClose => Message::WindowClose,
             Self::ChangeVolume(change) => Message::ChangeVolumeRelative(change.into_inner()),
             Self::ChangeSpeed(change) => Message::ChangeSpeedRelative(change.into_inner()),
-            Self::Seek(value) => Message::SeekPercent(value.into_inner())
+            Self::Seek(value) => Message::SeekPercent(value.into_inner()),
         }
     }
 }
@@ -333,6 +335,7 @@ pub enum Message {
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
+    TextCodeToggle,
 }
 
 /// The [`App`] stores application-specific state.
@@ -363,6 +366,7 @@ pub struct App {
     playback_speed: f64,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
+    previous_text: Option<i32>,
 }
 
 impl App {
@@ -936,6 +940,7 @@ impl Application for App {
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: None,
+            previous_text: None,
             ab_repeat: None,
             playback_speed: 1.0,
             #[cfg(feature = "xdg-portal")]
@@ -1275,6 +1280,16 @@ impl Application for App {
                     self.update_flags();
                 }
             }
+            Message::TextCodeToggle => {
+                if self.current_text.is_some() {
+                    self.previous_text = self.current_text;
+                    self.current_text = None;
+                } else {
+                    self.current_text = self.previous_text;
+                }
+
+                self.update_flags();
+            }
             Message::Pause | Message::Play | Message::PlayPause => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
@@ -1370,14 +1385,15 @@ impl Application for App {
                     video.seek(target, true).expect("seek");
                 }
             }
+
             Message::SeekPercent(float) => {
                 if let Some(video) = &mut self.video_opt {
-                    self.position =
-                        (self.duration * float).clamp(0.0, self.duration);
+                    self.position = (self.duration * float).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
                 }
             }
+
             Message::SeekRelease => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
@@ -1538,11 +1554,6 @@ impl Application for App {
                 }
                 self.update_controls(true);
             }
-            Message::ChangeSpeedRelative(float) => {
-                if let Some(video) = self.video_opt.as_ref() {
-                    return self.update(Message::PlaybackSpeed(video.speed() + float));
-                }
-            }
             Message::VideoAreaClick => {
                 if self.dropdown_opt.is_some() {
                     self.dropdown_opt = None;
@@ -1581,6 +1592,12 @@ impl Application for App {
                         "end of stream, repeat={:?}",
                         self.flags.config_state.player_state.repeat
                     );
+                }
+            }
+
+            Message::ChangeSpeedRelative(float) => {
+                if let Some(video) = self.video_opt.as_ref() {
+                    return self.update(Message::PlaybackSpeed(video.speed() + float));
                 }
             }
 
