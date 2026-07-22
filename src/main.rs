@@ -213,17 +213,23 @@ impl MenuAction for Action {
             Self::PlayPause => Message::PlayPause,
             Self::PlayPrev => Message::PlayPrev,
             Self::PlayNext => Message::PlayNext,
-            Self::SeekBackward => Message::SeekRelative(-10.0),
-            Self::SeekForward => Message::SeekRelative(10.0),
-            Self::NextFrame => Message::NextFrame,
-            Self::PreviousFrame => Message::PreviousFrame,
-            Self::AbRepeat => Message::AbRepeat,
-            Self::TextCodeToggle => Message::TextCodeToggle,
-            Self::AudioToggle => Message::AudioToggle,
+            Self::SeekBackward => Message::ShortcutEvent(Box::new(Message::SeekRelative(-10.0))),
+            Self::SeekForward => Message::ShortcutEvent(Box::new(Message::SeekRelative(10.0))),
+            Self::NextFrame => Message::ShortcutEvent(Box::new(Message::NextFrame)),
+            Self::PreviousFrame => Message::ShortcutEvent(Box::new(Message::PreviousFrame)),
+            Self::AbRepeat => Message::ShortcutEvent(Box::new(Message::AbRepeat)),
+            Self::TextCodeToggle => Message::ShortcutEvent(Box::new(Message::TextCodeToggle)),
+            Self::AudioToggle => Message::ShortcutEvent(Box::new(Message::AudioToggle)),
+            Self::ChangeVolume(change) => {
+                Message::ShortcutEvent(Box::new(Message::ChangeVolumeRelative(change.into_inner())))
+            }
+            Self::ChangeSpeed(change) => {
+                Message::ShortcutEvent(Box::new(Message::ChangeSpeedRelative(change.into_inner())))
+            }
+            Self::Seek(value) => {
+                Message::ShortcutEvent(Box::new(Message::SeekPercent(value.into_inner())))
+            }
             Self::WindowClose => Message::WindowClose,
-            Self::ChangeVolume(change) => Message::ChangeVolumeRelative(change.into_inner()),
-            Self::ChangeSpeed(change) => Message::ChangeSpeedRelative(change.into_inner()),
-            Self::Seek(value) => Message::SeekPercent(value.into_inner()),
         }
     }
 }
@@ -336,6 +342,7 @@ pub enum Message {
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
     TextCodeToggle,
+    ShortcutEvent(Box<Message>),
 }
 
 /// The [`App`] stores application-specific state.
@@ -362,11 +369,14 @@ pub struct App {
     current_audio: i32,
     text_codes: Vec<TextCode>,
     current_text: Option<i32>,
+    last_text: Option<i32>,
     ab_repeat: Option<(Option<f64>, Option<f64>)>,
     playback_speed: f64,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
-    previous_text: Option<i32>,
+    overlay_text: String,
+    overlay_time: Instant,
+    overlay_visible: bool,
 }
 
 impl App {
@@ -655,6 +665,10 @@ impl App {
             self.core.window.show_headerbar = false;
             self.controls = false;
         }
+
+        if self.overlay_time.elapsed() > CONTROLS_TIMEOUT {
+            self.overlay_visible = false;
+        }
         self.update_mpris_state();
     }
 
@@ -882,6 +896,7 @@ impl App {
             log::warn!("failed to set playback speed {}: {}", speed, err);
         }
     }
+
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -940,11 +955,14 @@ impl Application for App {
             current_audio: -1,
             text_codes: Vec::new(),
             current_text: None,
-            previous_text: None,
+            last_text: None,
             ab_repeat: None,
             playback_speed: 1.0,
             #[cfg(feature = "xdg-portal")]
             inhibit,
+            overlay_text: "".to_string(),
+            overlay_visible: false,
+            overlay_time: Instant::now(),
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1212,6 +1230,12 @@ impl Application for App {
 
                 self.core.nav_bar_set_toggled(true);
             }
+            Message::ShortcutEvent(message) => {
+                self.overlay_text = "".to_string();
+                self.overlay_time = Instant::now();
+                self.overlay_visible = true;
+                return self.update(*message);
+            }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
                 self.dropdown_opt = None;
@@ -1248,6 +1272,7 @@ impl Application for App {
             Message::AudioToggle => {
                 if let Some(video) = &mut self.video_opt {
                     video.set_muted(!video.muted());
+                    self.overlay_text = fl!("audio");
                     self.update_controls(true);
                 }
             }
@@ -1257,13 +1282,17 @@ impl Application for App {
                 {
                     video.set_volume(volume);
                     video.set_muted(false);
+                    self.overlay_text = fl!(
+                        "volume-percent",
+                        percent = ((volume * 100.0).round() as i32)
+                    );
                     self.update_controls(true);
                 }
             }
             Message::ChangeVolumeRelative(delta) => {
                 if let Some(video) = &mut self.video_opt {
-                    let volume = video.volume();
-                    return self.update(Message::AudioVolume(volume + delta));
+                    let volume = (video.volume() + delta).clamp(0.0, 1.0);
+                    return self.update(Message::AudioVolume(volume));
                 }
             }
             Message::TextCode(index) => {
@@ -1282,12 +1311,12 @@ impl Application for App {
             }
             Message::TextCodeToggle => {
                 if self.current_text.is_some() {
-                    self.previous_text = self.current_text;
+                    self.last_text = self.current_text;
                     self.current_text = None;
                 } else {
-                    self.current_text = self.previous_text;
+                    self.current_text = self.last_text;
                 }
-
+                self.overlay_text = fl!("subtitles");
                 self.update_flags();
             }
             Message::Pause | Message::Play | Message::PlayPause => {
@@ -1374,6 +1403,10 @@ impl Application for App {
                     video.set_paused(true);
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
+                    self.overlay_text = fl!(
+                        "seek-percent",
+                        percent = ((self.position / self.duration * 100.0).round() as i32)
+                    );
                     self.update_controls(true);
                 }
             }
@@ -1383,6 +1416,7 @@ impl Application for App {
                         (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
+                    self.overlay_text = fl!("seek-relative", seconds = secs);
                 }
             }
 
@@ -1391,6 +1425,8 @@ impl Application for App {
                     self.position = (self.duration * float).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
+                    self.overlay_text =
+                        fl!("seek-percent", percent = ((float * 100.0).round() as i32));
                 }
             }
 
@@ -1526,6 +1562,7 @@ impl Application for App {
 
                     self.position = (video.position().as_secs_f64() + frame_duration.as_secs_f64())
                         .clamp(0.0, self.duration);
+                    self.overlay_text = fl!("next-frame");
                     self.update_controls(true);
                 }
             }
@@ -1543,6 +1580,7 @@ impl Application for App {
 
                     self.position = target.as_secs_f64().clamp(0.0, self.duration);
                     video.seek(target, true).expect("seek");
+                    self.overlay_text = fl!("previous-frame");
                     self.update_controls(true);
                 }
             }
@@ -1551,6 +1589,7 @@ impl Application for App {
                 self.dropdown_opt = None;
                 if let Some(video) = &mut self.video_opt {
                     Self::apply_speed(video, speed);
+                    self.overlay_text = fl!("playback-speed", speed = format!("{:.2}", speed));
                 }
                 self.update_controls(true);
             }
@@ -1567,12 +1606,15 @@ impl Application for App {
                     match self.ab_repeat {
                         None => {
                             self.ab_repeat = Some((Some(current), None));
+                            self.overlay_text = fl!("ab-repeat-set-a");
                         }
                         Some((a, None)) => {
                             self.ab_repeat = Some((a, Some(current)));
+                            self.overlay_text = fl!("ab-repeat-set-b");
                         }
                         Some(_) => {
                             self.ab_repeat = None;
+                            self.overlay_text = fl!("ab-repeat-clear");
                         }
                     }
                     self.update_controls(true);
@@ -1679,7 +1721,6 @@ impl Application for App {
                             let _ = video.seek(Duration::from_secs_f64(target_a), true);
                         }
                     }
-
                     self.update_controls(self.dropdown_opt.is_some());
                 }
             }
@@ -2145,7 +2186,7 @@ impl Application for App {
             popover = popover.popup(widget::column::with_children(popup_items));
         }
 
-        widget::container(popover)
+        let base: Element<_> = widget::container(popover)
             .width(Length::Fill)
             .height(Length::Fill)
             .class(theme::Container::Custom(Box::new(move |_theme| {
@@ -2156,7 +2197,36 @@ impl Application for App {
                 }
                 appearance
             })))
-            .into()
+            .into();
+
+        if self.overlay_visible {
+            let osd = widget::container(
+                widget::container(widget::text(&self.overlay_text).size(20).font(font::bold()))
+                    .padding([space_xxs, space_m])
+                    //TODO: move style to libcosmic
+                    .class(theme::Container::custom(|theme| {
+                        let cosmic = theme.cosmic();
+                        let component = &cosmic.background(theme.transparent).component;
+                        widget::container::Style {
+                            text_color: Some(component.on.into()),
+                            background: Some(Background::Color(component.base.into())),
+                            border: Border {
+                                radius: 8.0.into(),
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }
+                    })),
+            )
+            .width(Length::Fill)
+            .align_x(Alignment::End)
+            .align_y(Alignment::Start)
+            .padding(space_m);
+
+            cosmic::iced::widget::stack![base, osd].into()
+        } else {
+            base
+        }
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -2217,7 +2287,6 @@ impl Application for App {
                 cosmic::iced::time::every(Duration::from_millis(64)).map(|_| Message::NewFrame),
             );
         }
-
         #[cfg(feature = "mpris-server")]
         {
             subscriptions.push(mpris::subscription());
