@@ -1,11 +1,11 @@
 open-file = Файлды ашу
 open-folder = Буманы ашу
 settings = Баптаулар
-appearance = Сыртқы түрі
-theme = Тақырып
-match-desktop = Жұмыс үстеліне сәйкес келу
-dark = Қараңғы
-light = Жарық
+appearance = Сыртқы көрініс
+theme = Тема
+match-desktop = Жұмыс үстеліне сәйкес болу
+dark = Қою
+light = Ашық
 file = Файл
 quit = Шығу
 close-file = Файлды жабу
