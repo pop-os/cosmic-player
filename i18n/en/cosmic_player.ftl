@@ -55,4 +55,8 @@ xdg-keywords = Audio;Film;Movie;Music;Sound;Video;
 volume-percent = Volume { $percent }%
 seek-percent = Seek { $percent }%
 playback-speed = Speed { $speed }x
-seek-relative = Seek { $seconds }s
+
+sound-on = Sound on
+sound-off = Sound off
+subtitles-on = Subtitles on
+subtitles-off = Subtitles off

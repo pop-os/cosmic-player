@@ -896,7 +896,6 @@ impl App {
             log::warn!("failed to set playback speed {}: {}", speed, err);
         }
     }
-
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -1272,7 +1271,11 @@ impl Application for App {
             Message::AudioToggle => {
                 if let Some(video) = &mut self.video_opt {
                     video.set_muted(!video.muted());
-                    self.overlay_text = fl!("audio");
+                    self.overlay_text = if video.muted() {
+                        fl!("sound-off")
+                    } else {
+                        fl!("sound-on")
+                    };
                     self.update_controls(true);
                 }
             }
@@ -1313,10 +1316,11 @@ impl Application for App {
                 if self.current_text.is_some() {
                     self.last_text = self.current_text;
                     self.current_text = None;
+                    self.overlay_text = fl!("subtitles-off");
                 } else {
                     self.current_text = self.last_text;
+                    self.overlay_text = fl!("subtitles-on");
                 }
-                self.overlay_text = fl!("subtitles");
                 self.update_flags();
             }
             Message::Pause | Message::Play | Message::PlayPause => {
@@ -1405,7 +1409,7 @@ impl Application for App {
                     video.seek(duration, true).expect("seek");
                     self.overlay_text = fl!(
                         "seek-percent",
-                        percent = ((self.position / self.duration * 100.0).round() as i32)
+                        percent = format!("{:.2}", (self.position / self.duration * 100.0))
                     );
                     self.update_controls(true);
                 }
@@ -1416,7 +1420,11 @@ impl Application for App {
                         (video.position().as_secs_f64() + secs).clamp(0.0, self.duration);
                     let target = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(target, true).expect("seek");
-                    self.overlay_text = fl!("seek-relative", seconds = secs);
+                    self.overlay_text = fl!(
+                        "seek-percent",
+                        percent = format!("{:.2}", (self.position / self.duration * 100.0))
+                    );
+                    self.update_controls(true);
                 }
             }
 
@@ -1427,6 +1435,7 @@ impl Application for App {
                     video.seek(target, true).expect("seek");
                     self.overlay_text =
                         fl!("seek-percent", percent = ((float * 100.0).round() as i32));
+                    self.update_controls(true);
                 }
             }
 
