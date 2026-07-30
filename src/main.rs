@@ -359,9 +359,12 @@ impl App {
     fn close(&mut self) -> bool {
         self.album_art_opt = None;
         //TODO: drop does not work well
-        let was_open = if let Some(mut video) = self.video_opt.take() {
-            log::info!("pausing video");
-            video.set_paused(true);
+        let was_open = if let Some(video) = self.video_opt.take() {
+            log::info!("stopping video pipeline");
+            // Use set_state(Null) directly to avoid panicking if the pipeline is in
+            // an error state (e.g. from a dropped or failed network stream).
+            // iced_video_player's set_paused uses unwrap() which can crash the app.
+            let _ = video.pipeline().set_state(gst::State::Null);
             log::info!("dropping video");
             drop(video);
             log::info!("dropped video");
