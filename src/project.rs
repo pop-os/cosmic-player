@@ -17,6 +17,11 @@ pub enum ProjectNode {
         name: String,
         path: PathBuf,
     },
+    /// A network stream URL (from m3u playlists, etc.)
+    Url {
+        name: String,
+        url: url::Url,
+    },
 }
 
 impl ProjectNode {
@@ -59,6 +64,7 @@ impl ProjectNode {
                     .into()
             }),
             Self::File { .. } => None,
+            Self::Url { .. } => None,
         }
     }
 
@@ -66,6 +72,7 @@ impl ProjectNode {
         match self {
             Self::Folder { name, .. } => name,
             Self::File { name, .. } => name,
+            Self::Url { name, .. } => name,
         }
     }
 
@@ -79,14 +86,14 @@ impl ProjectNode {
 impl Ord for ProjectNode {
     fn cmp(&self, other: &Self) -> Ordering {
         match self {
-            // Folders are always before files
+            // Folders are always before files and URLs
             Self::Folder { .. } => {
-                if let Self::File { .. } = other {
+                if matches!(other, Self::File { .. } | Self::Url { .. }) {
                     return Ordering::Less;
                 }
             }
-            // Files are always after folders
-            Self::File { .. } => {
+            // Files and URLs are always after folders
+            Self::File { .. } | Self::Url { .. } => {
                 if let Self::Folder { .. } = other {
                     return Ordering::Greater;
                 }

@@ -36,6 +36,7 @@ mod localize;
 mod menu;
 #[cfg(feature = "mpris-server")]
 mod mpris;
+mod playlist;
 mod project;
 mod thumbnail;
 mod video;
@@ -292,6 +293,7 @@ pub enum Message {
     FolderClearRecents,
     FolderOpenRecent(usize),
     MultipleLoad(Vec<url::Url>),
+    PlaylistLoad(PathBuf),
     Fullscreen,
     Key(Modifiers, Physical, Key),
     AudioCode(usize),
@@ -593,6 +595,132 @@ impl App {
         self.open_folder(path, position + 1, 1);
     }
 
+    /// Open an m3u/m3u8 playlist file as a project in the nav bar.
+    /// Returns the URL of the first entry for auto-play, or None if
+    /// the playlist is already open or empty.
+    fn open_playlist(&mut self, path: &Path) -> Option<url::Url> {
+        // Check if already open
+        for (_project_name, project_path) in self.projects.iter() {
+            if project_path == path {
+                return None;
+            }
+        }
+
+        let entries = match playlist::parse_m3u(path) {
+            Ok(entries) => entries,
+            Err(err) => {
+                log::error!("failed to parse playlist {:?}: {}", path, err);
+                return None;
+            }
+        };
+
+        if entries.is_empty() {
+            log::warn!("playlist {:?} is empty", path);
+            return None;
+        }
+
+        // Create folder node name from the playlist filename
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Playlist")
+            .to_string();
+
+        // Save the project
+        self.projects.push((name.clone(), path.to_path_buf()));
+
+        // Add to recent projects, ensuring only one entry
+        self.flags
+            .config_state
+            .recent_projects
+            .retain(|x| x != path);
+        self.flags
+            .config_state
+            .recent_projects
+            .push_front(path.to_path_buf());
+        self.flags.config_state.recent_projects.truncate(10);
+        self.save_config_state();
+
+        // Open nav bar
+        self.core.nav_bar_set_toggled(true);
+
+        // Create and insert the folder node for the playlist
+        let node = ProjectNode::Folder {
+            name: name.clone(),
+            path: path.to_path_buf(),
+            open: true,
+            root: true,
+        };
+
+        let mut entity = self.nav_model.insert().text(node.name().to_string());
+        if let Some(icon) = node.icon(16) {
+            entity = entity.icon(icon);
+        }
+        entity = entity.data(node);
+
+        let id = entity.id();
+        let mut position = self.nav_model.position(id).unwrap_or(0);
+        position += 1;
+
+        // Add each playlist entry as a child node
+        let mut first_url: Option<url::Url> = None;
+
+        for entry in &entries {
+            let node = match &entry.path {
+                playlist::PlaylistPath::File(file_path) => {
+                    let node_name = entry.title.clone().unwrap_or_else(|| {
+                        file_path
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Unknown")
+                            .to_string()
+                    });
+                    ProjectNode::File {
+                        name: node_name,
+                        path: file_path.clone(),
+                    }
+                }
+                playlist::PlaylistPath::Url(url) => {
+                    let node_name = entry.title.clone().unwrap_or_else(|| {
+                        url.path_segments()
+                            .and_then(|mut s| s.next_back())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("Stream")
+                            .to_string()
+                    });
+                    ProjectNode::Url {
+                        name: node_name,
+                        url: url.clone(),
+                    }
+                }
+            };
+
+            // Capture first entry's URL for auto-play
+            if first_url.is_none() {
+                first_url = match &entry.path {
+                    playlist::PlaylistPath::File(file_path) => {
+                        url::Url::from_file_path(file_path).ok()
+                    }
+                    playlist::PlaylistPath::Url(url) => Some(url.clone()),
+                };
+            }
+
+            let mut entity = self
+                .nav_model
+                .insert()
+                .position(position)
+                .indent(1)
+                .text(node.name().to_string());
+            if let Some(icon) = node.icon(16) {
+                entity = entity.icon(icon);
+            }
+            entity.data(node);
+            position += 1;
+        }
+
+        first_url
+    }
+
     fn add_file_to_project(&mut self, path: impl AsRef<Path>) {
         let path = path.as_ref();
         let node = match ProjectNode::new(path) {
@@ -803,7 +931,7 @@ impl App {
             loop {
                 let mut expand_opt = None;
                 for id in self.nav_model.iter() {
-                    if let Some(node) = self.nav_model.data(id) {
+                    if let Some(node) = self.nav_model.data::<ProjectNode>(id) {
                         match node {
                             ProjectNode::Folder { path, open, .. } => {
                                 if tab_path.starts_with(path) && !*open {
@@ -817,6 +945,9 @@ impl App {
                                     break;
                                 }
                             }
+                            // URL nodes do not have a local file path, so they
+                            // are matched in the else-if branch below.
+                            ProjectNode::Url { .. } => {}
                         }
                     }
                 }
@@ -829,6 +960,17 @@ impl App {
                     None => {
                         break;
                     }
+                }
+            }
+        } else if let Some(url) = &self.flags.url_opt {
+            // Handle network URL entries (from m3u playlists)
+            for id in self.nav_model.iter() {
+                if let Some(ProjectNode::Url { url: node_url, .. }) =
+                    self.nav_model.data::<ProjectNode>(id)
+                    && node_url == url
+                {
+                    active_id = id;
+                    break;
                 }
             }
         }
@@ -951,6 +1093,9 @@ impl Application for App {
             (Some(urls), _) => {
                 cosmic::task::message(cosmic::action::app(Message::MultipleLoad(urls)))
             }
+            (None, Some(path)) if playlist::is_playlist(&path) => {
+                cosmic::task::message(cosmic::action::app(Message::PlaylistLoad(path)))
+            }
             (None, Some(path)) if path.is_dir() => {
                 cosmic::task::message(cosmic::action::app(Message::FolderLoad(path)))
             }
@@ -1014,13 +1159,22 @@ impl Application for App {
 
                         Task::none()
                     }
-                    ProjectNode::File { path, .. } => match url::Url::from_file_path(&path) {
-                        Ok(url) => self.update(Message::FileLoad(url)),
-                        Err(()) => {
-                            log::warn!("failed to convert {:?} to url", path);
-                            Task::none()
+                    ProjectNode::File { path, .. } => {
+                        // Detect m3u playlist files
+                        if playlist::is_playlist(&path) {
+                            return self.update(Message::PlaylistLoad(path.clone()));
                         }
-                    },
+                        match url::Url::from_file_path(&path) {
+                            Ok(url) => self.update(Message::FileLoad(url)),
+                            Err(()) => {
+                                log::warn!("failed to convert {:?} to url", path);
+                                Task::none()
+                            }
+                        }
+                    }
+                    ProjectNode::Url { url, .. } => {
+                        self.update(Message::FileLoad(url.clone()))
+                    }
                 }
             }
             None => {
@@ -1059,6 +1213,12 @@ impl Application for App {
                 self.close();
             }
             Message::FileLoad(url) => {
+                // Detect m3u/m3u8 playlist files and redirect to PlaylistLoad
+                if let Ok(path) = url.to_file_path()
+                    && playlist::is_playlist(&path)
+                {
+                    return self.update(Message::PlaylistLoad(path));
+                }
                 self.flags.url_opt = Some(url);
                 self.ab_repeat = None;
                 return self.load();
@@ -1125,6 +1285,10 @@ impl Application for App {
                 }
             }
             Message::FolderLoad(path) => {
+                // Handle m3u playlists opened from recent projects
+                if playlist::is_playlist(&path) {
+                    return self.update(Message::PlaylistLoad(path));
+                }
                 self.open_project(path);
             }
             Message::FolderOpen => {
@@ -1171,7 +1335,10 @@ impl Application for App {
                     .collect();
 
                 for path in paths {
-                    if path.is_file() {
+                    if playlist::is_playlist(&path) {
+                        log::trace!("Opening playlist: {}", path.display());
+                        self.open_playlist(&path);
+                    } else if path.is_file() {
                         log::trace!("Appending file to playlist: {}", path.display());
                         self.add_file_to_project(path);
                     } else if path.is_dir() {
@@ -1186,6 +1353,12 @@ impl Application for App {
                 }
 
                 self.core.nav_bar_set_toggled(true);
+            }
+            Message::PlaylistLoad(path) => {
+                // Open the playlist and auto-play the first entry
+                if let Some(first_url) = self.open_playlist(&path) {
+                    return self.update(Message::FileLoad(first_url));
+                }
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
@@ -1381,8 +1554,9 @@ impl Application for App {
                         if self.nav_model.activate_position(curr_position - 1) {
                             let curr_id = self.nav_model.active();
                             match self.nav_model.data::<ProjectNode>(curr_id) {
-                                //The prev one is a media file, we play it.
-                                Some(ProjectNode::File { .. }) => {
+                                //The prev one is a media file or URL, we play it.
+                                Some(ProjectNode::File { .. })
+                                | Some(ProjectNode::Url { .. }) => {
                                     return self.on_nav_select(curr_id);
                                 }
 
@@ -1439,8 +1613,10 @@ impl Application for App {
                 if self.nav_model.activate_position(curr_position + 1) {
                     let curr_id = self.nav_model.active();
                     match self.nav_model.data::<ProjectNode>(curr_id) {
-                        //The next one is a media file, we play it.
-                        Some(ProjectNode::File { .. }) => return self.on_nav_select(curr_id),
+                        //The next one is a media file or URL, we play it.
+                        Some(ProjectNode::File { .. }) | Some(ProjectNode::Url { .. }) => {
+                            return self.on_nav_select(curr_id)
+                        }
 
                         //The next one is a folder. We expand it and recall PlayNext.
                         Some(ProjectNode::Folder { .. }) => {
