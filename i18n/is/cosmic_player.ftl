@@ -21,3 +21,19 @@ close-file = Loka skrá
 open-media-folder = Opna miðlamöppu...
 open-recent-media-folder = Opna nýlega miðlamöppu
 close-media-folder = Loka miðlamöppu
+
+clear-recent = Hreinsa nýlegan lista
+repeat-disabled = Endurtekning óvirk
+repeat-track = Endurtaka spor
+playback = Afspilun
+next-frame = Næsti rammi
+previous-frame = Fyrri rammi
+ab-repeat = A-B endurtekning
+ab-repeat-set-a = A-B endurtekning (A)
+ab-repeat-set-b = A-B endurtekning (B)
+ab-repeat-clear = Hreinsa A-B endurtekningu
+
+# XDG Metadata
+xdg-name = COSMIC Miðlaspilari
+xdg-comment = Miðlaspilari fyrir COSMIC skjáborðið
+xdg-keywords = Audio;Film;Movie;Music;Sound;Video;Hljóð;Kvikmynd;Tónlist;Myndband;Vídeó;
