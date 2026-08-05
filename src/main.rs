@@ -2154,6 +2154,11 @@ impl Application for App {
                 Message::SystemThemeModeChange(update.config)
             }),
         ];
+        // Wake on decoded frames instead of polling for them
+        if let Some(video) = self.video_opt.as_ref() {
+            subscriptions.push(video.frames().map(|()| Message::NewFrame));
+        }
+
         if self.video_opt.as_ref().is_some_and(|v| {
             ((!v.eos() && !v.paused()) || self.ab_repeat.is_some()) && !v.has_video()
         }) {
