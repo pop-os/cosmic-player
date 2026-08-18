@@ -1,0 +1,11 @@
+quit = Quit
+settings = Settings
+appearance = Appearance
+theme = Theme
+match-desktop = Match desktop
+dark = Dark
+light = Light
+file = File
+close-file = Close file
+open-file = Open file
+open-folder = Open folder
