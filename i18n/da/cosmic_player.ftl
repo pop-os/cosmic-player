@@ -1,0 +1,11 @@
+quit = Afslut
+appearance = Udseende
+theme = Tema
+match-desktop = Følg skrivebordets indstillinger
+dark = Mørkt
+light = Lyst
+close-file = Luk fil
+settings = Indstillinger
+open-file = Åbn fil
+open-folder = Åbn mappe
+file = Fil
