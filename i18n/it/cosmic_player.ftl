@@ -18,7 +18,7 @@ settings = Impostazioni
 
 appearance = Aspetto
 theme = Tema
-match-desktop = Sistema
+match-desktop = Abbina al desktop
 dark = Scuro
 light = Chiaro
 
