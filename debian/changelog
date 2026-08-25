@@ -1,3 +1,9 @@
+cosmic-player (1.7.0) noble; urgency=medium
+
+  * Epoch 1.7.0 version update
+
+ -- Jeremy Soller <jeremy@system76.com>  Tue, 25 Aug 2026 09:20:51 -0600
+
 cosmic-player (1.6.0) noble; urgency=medium
 
   * Epoch 1.6.0 version update
