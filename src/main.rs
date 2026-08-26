@@ -1327,9 +1327,11 @@ impl Application for App {
                 self.dropdown_opt = None;
 
                 if let Some(video) = &mut self.video_opt {
+                    if !self.dragging {
+                        self.paused_on_scrub = video.paused();
+                    }
                     self.dragging = true;
                     self.position = secs;
-                    self.paused_on_scrub = video.paused();
                     video.set_paused(true);
                     let duration = Duration::try_from_secs_f64(self.position).unwrap_or_default();
                     video.seek(duration, true).expect("seek");
