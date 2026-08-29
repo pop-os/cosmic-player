@@ -81,7 +81,32 @@ fn get_framerate(video: &Video) -> Option<f64> {
     let caps = pad.current_caps()?;
     let structure = caps.structure(0)?;
     let framerate = structure.get::<gst::Fraction>("framerate").ok()?;
-    Some(framerate.numer() as f64 / framerate.denom() as f64)
+    positive_framerate(framerate)
+}
+
+fn positive_framerate(framerate: gst::Fraction) -> Option<f64> {
+    if framerate.numer() <= 0 || framerate.denom() <= 0 {
+        return None;
+    }
+
+    let fps = framerate.numer() as f64 / framerate.denom() as f64;
+    fps.is_finite().then_some(fps)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::positive_framerate;
+    use iced_video_player::gst;
+
+    #[test]
+    fn variable_framerate_uses_fallback() {
+        assert_eq!(positive_framerate(gst::Fraction::new(0, 1)), None);
+    }
+
+    #[test]
+    fn fixed_framerate_is_preserved() {
+        assert_eq!(positive_framerate(gst::Fraction::new(30, 1)), Some(30.0));
+    }
 }
 
 /// Runs application with these settings
