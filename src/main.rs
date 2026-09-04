@@ -34,6 +34,7 @@ mod config;
 mod key_bind;
 mod localize;
 mod menu;
+mod mouse_activity;
 #[cfg(feature = "mpris-server")]
 mod mpris;
 mod project;
@@ -344,6 +345,7 @@ pub enum Message {
     VideoAreaClick,
     PlaybackSpeed(f64),
     ShowControls,
+    HideControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
 }
@@ -1658,6 +1660,10 @@ impl Application for App {
             Message::ShowControls => {
                 self.update_controls(true);
             }
+            Message::HideControls => {
+                self.core.window.show_headerbar = false;
+                self.controls = false;
+            }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
             }
@@ -2114,6 +2120,10 @@ impl Application for App {
             popover = popover.popup(widget::column::with_children(popup_items));
         }
 
+        let popover = mouse_activity::MouseActivity::new(popover, self.controls, CONTROLS_TIMEOUT)
+            .on_active(Message::ShowControls)
+            .on_idle(Message::HideControls);
+
         widget::container(popover)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -2141,7 +2151,6 @@ impl Application for App {
                     key,
                     ..
                 }) => Some(Message::Key(modifiers, physical_key, key)),
-                Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
                 Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Scrolled(delta)),
                 _ => None,
             }),
@@ -2179,6 +2188,11 @@ impl Application for App {
                 Message::SystemThemeModeChange(update.config)
             }),
         ];
+        // Wake on decoded frames instead of polling for them
+        if let Some(video) = self.video_opt.as_ref() {
+            subscriptions.push(video.frames().map(|()| Message::NewFrame));
+        }
+
         if self.video_opt.as_ref().is_some_and(|v| {
             ((!v.eos() && !v.paused()) || self.ab_repeat.is_some()) && !v.has_video()
         }) {
