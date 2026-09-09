@@ -4,6 +4,7 @@
 use cosmic::app::{Core, Settings, Task};
 use cosmic::command::set_theme;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::direction::Direction;
 use cosmic::iced::event::{self, Event};
 use cosmic::iced::keyboard::key::Physical;
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
@@ -1232,6 +1233,11 @@ impl Application for App {
             Message::Key(modifiers, physical, key) => {
                 for (key_bind, action) in self.key_binds.iter() {
                     if key_bind.matches(modifiers, &key, Some(&physical)) {
+                        if self.controls
+                            && matches!(action, Action::SeekForward | Action::SeekBackward)
+                        {
+                            continue;
+                        }
                         return self.update(action.message());
                     }
                 }
@@ -2193,5 +2199,28 @@ impl Application for App {
         }
 
         Subscription::batch(subscriptions)
+    }
+
+    fn directional_navigation(
+        &mut self,
+        dir: Direction,
+        window_id: window::Id,
+    ) -> Option<Task<Self::Message>> {
+        if window_id == window::Id::RESERVED && self.video_opt.is_some() {
+            // opt out of automatic handling of arrow keys
+            if self.controls {
+                self.controls_time = Instant::now();
+
+                None
+            } else if matches!(dir, Direction::Up | Direction::Down) {
+                self.controls = true;
+                self.controls_time = Instant::now();
+                Some(Task::none())
+            } else {
+                Some(Task::none())
+            }
+        } else {
+            None
+        }
     }
 }
