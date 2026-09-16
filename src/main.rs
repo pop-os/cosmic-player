@@ -1219,6 +1219,7 @@ impl Application for App {
                 if let Some(window_id) = self.core.main_window_id() {
                     self.fullscreen = !self.fullscreen;
                     self.core.window.show_headerbar = !self.fullscreen;
+                    self.core.nav_bar_set_toggled(!self.fullscreen);
                     return set_mode(
                         window_id,
                         if self.fullscreen {
