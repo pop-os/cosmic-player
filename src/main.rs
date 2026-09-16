@@ -8,7 +8,7 @@ use cosmic::iced::event::{self, Event};
 use cosmic::iced::keyboard::key::Physical;
 use cosmic::iced::keyboard::{Event as KeyEvent, Key, Modifiers};
 use cosmic::iced::mouse::{Event as MouseEvent, ScrollDelta};
-use cosmic::iced::window::{self, set_mode};
+use cosmic::iced::window::{self, Event as WindowEvent, set_mode};
 use cosmic::iced::{
     Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
 };
@@ -346,6 +346,7 @@ pub enum Message {
     ShowControls,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
+    WindowResized(f32),
 }
 
 /// The [`App`] stores application-specific state.
@@ -376,6 +377,7 @@ pub struct App {
     playback_speed: f64,
     #[cfg(feature = "xdg-portal")]
     inhibit: tokio::sync::watch::Sender<bool>,
+    window_height: f32,
 }
 
 impl App {
@@ -953,6 +955,7 @@ impl Application for App {
             playback_speed: 1.0,
             #[cfg(feature = "xdg-portal")]
             inhibit,
+            window_height: 0.0,
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -982,6 +985,37 @@ impl Application for App {
             _ => app.load(),
         };
         (app, command)
+    }
+
+    fn nav_bar(&self) -> Option<Element<'_, cosmic::Action<Self::Message>>> {
+        let core = self.core();
+        if !core.nav_bar_active() {
+            return None;
+        }
+        let nav_model = self.nav_model()?;
+        let mut nav = nav_bar(nav_model, |id| {
+            cosmic::Action::Cosmic(cosmic::app::Action::NavBar(id))
+        })
+        .into_container()
+        .width(Length::Shrink)
+        .height(Length::Fill);
+
+        // if needs gap
+        if self.video_opt.is_some() && self.controls {
+            let gap = if core.window.show_headerbar {
+                100.0
+            } else {
+                60.0
+            };
+
+            nav = nav.max_height(self.window_height - gap);
+        }
+
+        if !core.is_condensed() {
+            nav = nav.max_width(280);
+        }
+
+        Some(nav.into())
     }
 
     fn nav_model(&self) -> Option<&nav_bar::Model> {
@@ -1058,6 +1092,9 @@ impl Application for App {
     /// Handle application events here.
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
+            Message::WindowResized(height) => {
+                self.window_height = height;
+            }
             Message::Config(config) => {
                 if config != self.flags.config {
                     log::info!("update config");
@@ -2143,6 +2180,9 @@ impl Application for App {
                 }) => Some(Message::Key(modifiers, physical_key, key)),
                 Event::Mouse(MouseEvent::CursorMoved { .. }) => Some(Message::ShowControls),
                 Event::Mouse(MouseEvent::WheelScrolled { delta }) => Some(Message::Scrolled(delta)),
+                Event::Window(WindowEvent::Resized(size)) => {
+                    Some(Message::WindowResized(size.height))
+                }
                 _ => None,
             }),
             cosmic_config::config_subscription(
