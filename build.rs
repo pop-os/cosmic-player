@@ -1,5 +1,5 @@
-use vergen::EmitBuilder;
 use std::{env, fs, path::PathBuf};
+use vergen::EmitBuilder;
 use xdgen::{App, Context, FluentString};
 
 fn main() {

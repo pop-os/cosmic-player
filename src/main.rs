@@ -488,11 +488,10 @@ impl App {
         self.set_looping_from_repeat_state();
         self.update_flags();
         self.update_mpris_meta();
-        if self.playback_speed != 1.0 {
-            if let Some(video) = &mut self.video_opt {
+        if self.playback_speed != 1.0
+            && let Some(video) = &mut self.video_opt {
                 Self::apply_speed(video, self.playback_speed);
             }
-        }
         self.update_title()
     }
 
@@ -1959,7 +1958,7 @@ impl Application for App {
                     if self
                         .video_opt
                         .as_ref()
-                        .map_or(true, |video| video.has_video())
+                        .is_none_or(|video| video.has_video())
                     {
                         widget::button::icon(
                             widget::icon::from_svg_bytes(JUMP_BACKWARD_ICON).symbolic(true),
@@ -1974,7 +1973,7 @@ impl Application for App {
                 );
             row = row.push(
                 widget::button::icon(
-                    if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                    if self.video_opt.as_ref().is_none_or(|video| video.paused()) {
                         widget::icon::from_name("media-playback-start-symbolic").size(16)
                     } else {
                         widget::icon::from_name("media-playback-pause-symbolic").size(16)
@@ -1987,7 +1986,7 @@ impl Application for App {
                 if self
                     .video_opt
                     .as_ref()
-                    .map_or(true, |video| video.has_video())
+                    .is_none_or(|video| video.has_video())
                 {
                     widget::button::icon(
                         widget::icon::from_svg_bytes(JUMP_FORWARD_ICON).symbolic(true),
