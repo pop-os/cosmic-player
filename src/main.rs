@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use std::{fs, process, thread};
 use tokio::sync::mpsc;
 
-use crate::config::{CONFIG_VERSION, Config, ConfigState, RepeatState};
+use crate::config::{CONFIG_VERSION, Config, ConfigState, RepeatState, TimeState};
 use crate::key_bind::{KeyBind, key_binds};
 use crate::project::ProjectNode;
 
@@ -327,6 +327,7 @@ pub enum Message {
     Play,
     PlayPause,
     RepeatToggled(RepeatState),
+    TimeToggle,
     Scrolled(ScrollDelta),
     Seek(f64),
     SeekRelative(f64),
@@ -1299,6 +1300,14 @@ impl Application for App {
                 self.update_controls(true);
                 self.save_config_state();
             }
+            Message::TimeToggle => {
+                self.flags.config_state.time_state = match self.flags.config_state.time_state {
+                    TimeState::Elapsed => TimeState::Remaining,
+                    TimeState::Remaining => TimeState::Elapsed,
+                };
+                self.update_controls(true);
+                self.save_config_state();
+            }
             Message::Scrolled(delta) => {
                 let nav_bar_toggled = self.core.nav_bar_active();
                 if let Some(video) = &mut self.video_opt {
@@ -2025,15 +2034,33 @@ impl Application for App {
                 row = row.push(widget::space::horizontal());
             } else {
                 row = row
-                    .push(widget::text(format_time(self.position)).font(font::mono()))
+                    .push(widget::tooltip(
+                        widget::mouse_area(
+                            widget::text(match self.flags.config_state.time_state {
+                                TimeState::Elapsed => format_time(self.position),
+                                TimeState::Remaining => {
+                                    format!("-{}", format_time(self.duration - self.position))
+                                }
+                            })
+                            .font(font::mono()),
+                        )
+                        .on_press(Message::TimeToggle),
+                        widget::text(match self.flags.config_state.time_state {
+                            TimeState::Elapsed => fl!("time-elapsed"),
+                            TimeState::Remaining => fl!("time-remaining"),
+                        }),
+                        widget::tooltip::Position::Top,
+                    ))
                     .push(
                         Slider::new(0.0..=self.duration, self.position, Message::Seek)
                             .step(0.1)
                             .on_release(Message::SeekRelease),
                     )
-                    .push(
-                        widget::text(format_time(self.duration - self.position)).font(font::mono()),
-                    );
+                    .push(widget::tooltip(
+                        widget::text(format_time(self.duration)).font(font::mono()),
+                        widget::text(fl!("time-total")),
+                        widget::tooltip::Position::Top,
+                    ));
             }
             row = row
                 .push(
@@ -2091,16 +2118,34 @@ impl Application for App {
                             widget::row::with_capacity(3)
                                 .align_y(Alignment::Center)
                                 .spacing(space_xxs)
-                                .push(widget::text(format_time(self.position)).font(font::mono()))
+                                .push(widget::tooltip(
+                                    widget::mouse_area(
+                                        widget::text(match self.flags.config_state.time_state {
+                                            TimeState::Elapsed => format_time(self.position),
+                                            TimeState::Remaining => format!(
+                                                "-{}",
+                                                format_time(self.duration - self.position)
+                                            ),
+                                        })
+                                        .font(font::mono()),
+                                    )
+                                    .on_press(Message::TimeToggle),
+                                    widget::text(match self.flags.config_state.time_state {
+                                        TimeState::Elapsed => fl!("time-elapsed"),
+                                        TimeState::Remaining => fl!("time-remaining"),
+                                    }),
+                                    widget::tooltip::Position::Top,
+                                ))
                                 .push(
                                     Slider::new(0.0..=self.duration, self.position, Message::Seek)
                                         .step(0.1)
                                         .on_release(Message::SeekRelease),
                                 )
-                                .push(
-                                    widget::text(format_time(self.duration - self.position))
-                                        .font(font::mono()),
-                                ),
+                                .push(widget::tooltip(
+                                    widget::text(format_time(self.duration)).font(font::mono()),
+                                    widget::text(fl!("time-total")),
+                                    widget::tooltip::Position::Top,
+                                )),
                         )
                         .padding([space_xxs, space_xs])
                         .class(theme::Container::WindowBackground),
