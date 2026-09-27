@@ -344,6 +344,8 @@ pub enum Message {
     VideoAreaClick,
     PlaybackSpeed(f64),
     ShowControls,
+    ControlsHoverEnter,
+    ControlsHoverExit,
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
 }
@@ -355,6 +357,7 @@ pub struct App {
     album_art_opt: Option<tempfile::NamedTempFile>,
     controls: bool,
     controls_time: Instant,
+    controls_hovered: bool,
     dropdown_opt: Option<DropdownKind>,
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
@@ -652,6 +655,7 @@ impl App {
 
     fn update_controls(&mut self, in_use: bool) {
         if in_use
+            || self.controls_hovered
             || !self
                 .video_opt
                 .as_ref()
@@ -932,6 +936,7 @@ impl Application for App {
             album_art_opt: None,
             controls: true,
             controls_time: Instant::now(),
+            controls_hovered: false,
             dropdown_opt: None,
             fullscreen: false,
             key_binds: key_binds(),
@@ -1658,6 +1663,18 @@ impl Application for App {
             Message::ShowControls => {
                 self.update_controls(true);
             }
+            Message::ControlsHoverEnter => {
+                if !self.controls_hovered {
+                    self.controls_hovered = true;
+                    self.update_controls(true);
+                }
+            }
+            Message::ControlsHoverExit => {
+                if self.controls_hovered {
+                    self.controls_hovered = false;
+                    self.update_controls(false);
+                }
+            }
             Message::SystemThemeModeChange(_theme_mode) => {
                 return self.update_config();
             }
@@ -2111,7 +2128,11 @@ impl Application for App {
             }
         }
         if !popup_items.is_empty() {
-            popover = popover.popup(widget::column::with_children(popup_items));
+            popover = popover.popup(
+                widget::mouse_area(widget::column::with_children(popup_items))
+                    .on_enter(Message::ControlsHoverEnter)
+                    .on_exit(Message::ControlsHoverExit),
+            );
         }
 
         widget::container(popover)
