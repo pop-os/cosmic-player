@@ -906,9 +906,10 @@ impl App {
 
     fn settings(&self) -> Element<'_, Message> {
         let appearance = widget::settings::section().title(fl!("appearance")).add(
-            widget::settings::item::builder(fl!("appearance-overlay")).control(widget::toggler(
-                self.flags.config_state.overlay_in_window_mode,
-            ).on_toggle(Message::OverlayInWindowMode)),
+            widget::settings::item::builder(fl!("appearance-overlay")).control(
+                widget::toggler(self.flags.config_state.overlay_in_window_mode)
+                    .on_toggle(Message::OverlayInWindowMode),
+            ),
         );
 
         widget::settings::view_column(vec![appearance.into()]).into()
@@ -1717,7 +1718,6 @@ impl Application for App {
         }
     }
 
-
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         vec![menu::menu_bar(
             &self.flags.config,
@@ -2139,7 +2139,7 @@ impl Application for App {
                         .class(theme::Container::WindowBackground),
                 )
                 .on_press(Message::ShowControls)
-                .into()
+                .into(),
             );
             if self.core.is_condensed() {
                 controls_items.push(
@@ -2163,7 +2163,7 @@ impl Application for App {
                         .class(theme::Container::WindowBackground),
                     )
                     .on_press(Message::ShowControls)
-                    .into()
+                    .into(),
                 );
             }
         }
@@ -2196,8 +2196,8 @@ impl Application for App {
                 .into()
         } else {
             let controls_column: Element<_> = widget::column::with_children(controls_items).into();
-            let mut inner_popover = widget::popover(controls_column)
-                .position(widget::popover::Position::Top);
+            let mut inner_popover =
+                widget::popover(controls_column).position(widget::popover::Position::Top);
 
             if let Some(dropdown_elem) = dropdown_popup {
                 inner_popover = inner_popover.popup(dropdown_elem);

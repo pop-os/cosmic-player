@@ -134,9 +134,10 @@ pub fn menu_bar<'a>(
         ),
         menu::Tree::with_children(
             RcElementWrapper::new(Element::from(menu::root(fl!("view")))),
-            menu::items(key_binds, vec![
-                menu::Item::Button(fl!("settings"), None, Action::Settings),
-            ],),
+            menu::items(
+                key_binds,
+                vec![menu::Item::Button(fl!("settings"), None, Action::Settings)],
+            ),
         ),
     ])
     .item_height(ItemHeight::Dynamic(40))
