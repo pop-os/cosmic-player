@@ -1,7 +1,7 @@
 // Copyright 2023 System76 <info@system76.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use cosmic::app::{Core, Settings, Task};
+use cosmic::app::{Core, Settings, Task, context_drawer};
 use cosmic::command::set_theme;
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::event::{self, Event};
@@ -212,6 +212,7 @@ pub enum Action {
     NextFrame,
     PreviousFrame,
     AbRepeat,
+    Settings,
     WindowClose,
 }
 
@@ -237,6 +238,7 @@ impl MenuAction for Action {
             Self::NextFrame => Message::NextFrame,
             Self::PreviousFrame => Message::PreviousFrame,
             Self::AbRepeat => Message::AbRepeat,
+            Self::Settings => Message::Context(ContextMessage::Settings),
             Self::WindowClose => Message::WindowClose,
         }
     }
@@ -299,6 +301,11 @@ impl AsRef<str> for TextCode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContextMessage {
+    Settings,
+}
+
 /// Messages that are used specifically by our [`App`].
 #[derive(Clone, Debug)]
 pub enum Message {
@@ -344,6 +351,8 @@ pub enum Message {
     VideoAreaClick,
     PlaybackSpeed(f64),
     ShowControls,
+    OverlayInWindowMode(bool),
+    Context(ContextMessage),
     SystemThemeModeChange(cosmic_theme::ThemeMode),
     WindowClose,
 }
@@ -352,6 +361,7 @@ pub enum Message {
 pub struct App {
     core: Core,
     flags: Flags,
+    context_page: Option<ContextMessage>,
     album_art_opt: Option<tempfile::NamedTempFile>,
     controls: bool,
     controls_time: Instant,
@@ -652,6 +662,8 @@ impl App {
 
     fn update_controls(&mut self, in_use: bool) {
         if in_use
+            || self.context_page.is_some()
+            || (!self.fullscreen && !self.flags.config_state.overlay_in_window_mode)
             || !self
                 .video_opt
                 .as_ref()
@@ -891,6 +903,16 @@ impl App {
             log::warn!("failed to set playback speed {}: {}", speed, err);
         }
     }
+
+    fn settings(&self) -> Element<'_, Message> {
+        let appearance = widget::settings::section().title(fl!("appearance")).add(
+            widget::settings::item::builder(fl!("appearance-overlay")).control(widget::toggler(
+                self.flags.config_state.overlay_in_window_mode,
+            ).on_toggle(Message::OverlayInWindowMode)),
+        );
+
+        widget::settings::view_column(vec![appearance.into()]).into()
+    }
 }
 
 /// Implement [`cosmic::Application`] to integrate with COSMIC.
@@ -929,6 +951,7 @@ impl Application for App {
         let mut app = App {
             core,
             flags,
+            context_page: None,
             album_art_opt: None,
             controls: true,
             controls_time: Instant::now(),
@@ -1655,6 +1678,19 @@ impl Application for App {
             Message::Reload => {
                 return self.load();
             }
+            Message::OverlayInWindowMode(state) => {
+                self.flags.config_state.overlay_in_window_mode = state;
+                self.save_config_state();
+            }
+            Message::Context(page) => {
+                if self.context_page == Some(page) {
+                    self.context_page = None;
+                } else {
+                    self.context_page = Some(page);
+                }
+
+                self.set_show_context(self.context_page.is_some());
+            }
             Message::ShowControls => {
                 self.update_controls(true);
             }
@@ -1667,6 +1703,20 @@ impl Application for App {
         }
         Task::none()
     }
+
+    fn context_drawer(&self) -> Option<context_drawer::ContextDrawer<'_, Self::Message>> {
+        let page = self.context_page?;
+        match page {
+            ContextMessage::Settings => {
+                let content = self.settings();
+                Some(
+                    context_drawer::context_drawer(content, Message::Context(page))
+                        .title(fl!("settings")),
+                )
+            }
+        }
+    }
+
 
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         vec![menu::menu_bar(
@@ -1797,8 +1847,13 @@ impl Application for App {
             .on_press(Message::VideoAreaClick)
             .on_double_press(Message::Fullscreen);
 
-        let mut popover = widget::popover(mouse_area).position(widget::popover::Position::Bottom);
-        let mut popup_items = Vec::<Element<_>>::with_capacity(3);
+        let video_area: Element<_> = widget::container(mouse_area)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+
+        let mut dropdown_popup: Option<Element<_>> = None;
+
         if let Some(dropdown) = self.dropdown_opt {
             let mut items = Vec::<Element<_>>::new();
             match dropdown {
@@ -1921,7 +1976,7 @@ impl Application for App {
                 });
             }
 
-            popup_items.push(
+            dropdown_popup = Some(
                 widget::row::with_children(vec![
                     widget::space::horizontal().into(),
                     widget::mouse_area(
@@ -1951,6 +2006,9 @@ impl Application for App {
                 .into(),
             );
         }
+
+        let mut controls_items = Vec::<Element<_>>::with_capacity(2);
+
         if self.controls {
             let mut row = widget::row::with_capacity(9)
                 .align_y(Alignment::Center)
@@ -2074,18 +2132,17 @@ impl Application for App {
                     )
                     .on_press(Message::DropdownToggle(DropdownKind::Audio)),
                 );
-            popup_items.push(
+            controls_items.push(
                 widget::mouse_area(
                     widget::container(row)
                         .padding([space_xxs, space_xs])
                         .class(theme::Container::WindowBackground),
                 )
                 .on_press(Message::ShowControls)
-                .into(),
+                .into()
             );
-
             if self.core.is_condensed() {
-                popup_items.push(
+                controls_items.push(
                     widget::mouse_area(
                         widget::container(
                             widget::row::with_capacity(3)
@@ -2106,26 +2163,63 @@ impl Application for App {
                         .class(theme::Container::WindowBackground),
                     )
                     .on_press(Message::ShowControls)
-                    .into(),
+                    .into()
                 );
             }
         }
-        if !popup_items.is_empty() {
-            popover = popover.popup(widget::column::with_children(popup_items));
-        }
 
-        widget::container(popover)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .class(theme::Container::Custom(Box::new(move |_theme| {
-                let mut appearance =
-                    widget::container::Style::default().background(background_color);
-                if let Some(text_color) = text_color_opt {
-                    appearance.text_color = Some(text_color);
-                }
-                appearance
-            })))
-            .into()
+        if !self.fullscreen && !self.flags.config_state.overlay_in_window_mode {
+            let mut window = widget::column::with_capacity(2)
+                .width(Length::Fill)
+                .height(Length::Fill);
+            window = window.push(video_area);
+            let controls_bar: Element<_> = widget::column::with_children(controls_items)
+                .width(Length::Fill)
+                .into();
+            let mut controls_popover =
+                widget::popover(controls_bar).position(widget::popover::Position::Top);
+            if let Some(dropdown_elem) = dropdown_popup {
+                controls_popover = controls_popover.popup(dropdown_elem);
+            }
+            window = window.push(controls_popover);
+            widget::container(window)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .class(theme::Container::Custom(Box::new(move |_theme| {
+                    let mut appearance =
+                        widget::container::Style::default().background(background_color);
+                    if let Some(text_color) = text_color_opt {
+                        appearance.text_color = Some(text_color);
+                    }
+                    appearance
+                })))
+                .into()
+        } else {
+            let mut popover = widget::popover(
+                video_area,
+            )
+            .position(widget::popover::Position::Bottom);
+            let mut popup_items = Vec::<Element<_>>::with_capacity(2);
+            if let Some(dropdown_elem) = dropdown_popup {
+                popup_items.push(dropdown_elem);
+            }
+            popup_items.push(widget::column::with_children(controls_items).into());
+            if !popup_items.is_empty() {
+                popover = popover.popup(widget::column::with_children(popup_items));
+            }
+            widget::container(popover)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .class(theme::Container::Custom(Box::new(move |_theme| {
+                    let mut appearance =
+                        widget::container::Style::default().background(background_color);
+                    if let Some(text_color) = text_color_opt {
+                        appearance.text_color = Some(text_color);
+                    }
+                    appearance
+                })))
+                .into()
+        }
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {

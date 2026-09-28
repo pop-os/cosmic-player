@@ -132,6 +132,12 @@ pub fn menu_bar<'a>(
             RcElementWrapper::new(Element::from(menu::root(fl!("playback")))),
             menu::items(key_binds, playback),
         ),
+        menu::Tree::with_children(
+            RcElementWrapper::new(Element::from(menu::root(fl!("view")))),
+            menu::items(key_binds, vec![
+                menu::Item::Button(fl!("settings"), None, Action::Settings),
+            ],),
+        ),
     ])
     .item_height(ItemHeight::Dynamic(40))
     .item_width(ItemWidth::Uniform(320))
