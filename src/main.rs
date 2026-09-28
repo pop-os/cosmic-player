@@ -2195,18 +2195,18 @@ impl Application for App {
                 })))
                 .into()
         } else {
-            let mut popover = widget::popover(
-                video_area,
-            )
-            .position(widget::popover::Position::Bottom);
-            let mut popup_items = Vec::<Element<_>>::with_capacity(2);
+            let controls_column: Element<_> = widget::column::with_children(controls_items).into();
+            let mut inner_popover = widget::popover(controls_column)
+                .position(widget::popover::Position::Top);
+
             if let Some(dropdown_elem) = dropdown_popup {
-                popup_items.push(dropdown_elem);
+                inner_popover = inner_popover.popup(dropdown_elem);
             }
-            popup_items.push(widget::column::with_children(controls_items).into());
-            if !popup_items.is_empty() {
-                popover = popover.popup(widget::column::with_children(popup_items));
-            }
+
+            let popover = widget::popover(video_area)
+                .position(widget::popover::Position::Bottom)
+                .popup(inner_popover);
+
             widget::container(popover)
                 .width(Length::Fill)
                 .height(Length::Fill)
