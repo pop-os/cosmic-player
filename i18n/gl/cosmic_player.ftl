@@ -1,7 +1,7 @@
 settings = Axustes
 appearance = Apariencia
 theme = Tema
-match-desktop = Axustar ao escritorio
+match-desktop = Emparexar co escritorio
 dark = Escuro
 light = Claro
 file = Ficheiro
