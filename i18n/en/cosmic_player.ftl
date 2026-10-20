@@ -51,3 +51,12 @@ ab-repeat-clear = Clear A-B Repeat
 xdg-name = COSMIC Media Player
 xdg-comment = Media player for the COSMIC desktop
 xdg-keywords = Audio;Film;Movie;Music;Sound;Video;
+
+volume-percent = Volume { $percent }%
+seek-percent = Seek { $percent }%
+playback-speed = Speed { $speed }x
+
+sound-on = Sound on
+sound-off = Sound off
+subtitles-on = Subtitles on
+subtitles-off = Subtitles off

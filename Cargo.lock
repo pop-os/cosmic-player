@@ -1146,6 +1146,7 @@ dependencies = [
  "libcosmic",
  "log",
  "mpris-server",
+ "ordered-float",
  "rust-embed",
  "serde",
  "tempfile",
