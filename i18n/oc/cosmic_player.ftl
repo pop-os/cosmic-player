@@ -32,3 +32,5 @@ xdg-name = Lector multimèdia COSMIC
 xdg-comment = Lector multimèdia pel burèu COSMIC
 xdg-keywords = Àudio;Musica;Vidèo;Film;Son;
 quit = Quitar
+open-file = Dobrir lo fichièr
+open-folder = Dobrir lo dossièr
