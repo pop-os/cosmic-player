@@ -38,6 +38,15 @@ fn suppress_suspicious_audio_gaps(audio_filter: &gst::Element) {
     });
 }
 
+pub fn pipeline_from_description(
+    description: &str,
+) -> Result<gst::Pipeline, iced_video_player::Error> {
+    let pipeline = gst::parse::launch(description)?
+        .downcast::<gst::Pipeline>()
+        .map_err(|_| iced_video_player::Error::Cast)?;
+    Ok(pipeline)
+}
+
 #[derive(Debug, Default)]
 pub struct VideoSettings {
     pub mute: bool,
@@ -49,18 +58,24 @@ pub fn new_video(
 ) -> Result<Video, cosmic::Task<cosmic::Action<super::Message>>> {
     //TODO: this code came from iced_video_player::Video::new and has been modified to stop the pipeline on error
     //TODO: remove unwraps and enable playback of files with only audio.
-    gst::init().unwrap();
+    if let Err(err) = gst::init() {
+        log::error!("failed to initialize GStreamer: {err}");
+        return Err(Task::none());
+    }
 
-    let pipeline = format!(
-        "playbin uri=\"{}\"{} video-sink=\"videoscale ! videoconvert ! videoflip method=automatic ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
+    let description = format!(
+        "playbin uri=\"{}\"{} video-sink=\"videoscale ! videoconvert ! videoflip method=automatic \
+        ! appsink name=iced_video drop=true caps=video/x-raw,format=NV12,pixel-aspect-ratio=1/1\"",
         url.as_str(),
         if settings.mute { " mute=true" } else { "" }
     );
-    let pipeline = gst::parse::launch(pipeline.as_ref())
-        .unwrap()
-        .downcast::<gst::Pipeline>()
-        .map_err(|_| iced_video_player::Error::Cast)
-        .unwrap();
+    let pipeline = match pipeline_from_description(&description) {
+        Ok(pipeline) => pipeline,
+        Err(err) => {
+            log::error!("failed to create pipeline for {url} ({settings:?}): {err}");
+            return Err(Task::none());
+        }
+    };
     let audio_filter = gst::ElementFactory::make("scaletempo")
         .build()
         .unwrap_or_else(|_| {
@@ -124,15 +139,15 @@ pub fn new_video(
 
 #[cfg(test)]
 mod tests {
-    use super::is_suspicious_audio_gap;
+    use super::{is_suspicious_audio_gap, pipeline_from_description};
     use iced_video_player::gst;
 
     #[test]
     fn long_audio_gap_is_suspicious() {
         assert!(is_suspicious_audio_gap(Some(gst::ClockTime::SECOND)));
-        assert!(is_suspicious_audio_gap(Some(
-            gst::ClockTime::from_seconds(3)
-        )));
+        assert!(is_suspicious_audio_gap(Some(gst::ClockTime::from_seconds(
+            3
+        ))));
     }
 
     #[test]
@@ -141,5 +156,23 @@ mod tests {
             gst::ClockTime::from_mseconds(999)
         )));
         assert!(!is_suspicious_audio_gap(None));
+    }
+    #[test]
+    fn valid_description_builds_pipeline() {
+        gst::init().unwrap();
+        assert!(pipeline_from_description("fakesrc ! fakesink").is_ok());
+    }
+
+    #[test]
+    fn missing_element_is_an_error_not_a_panic() {
+        gst::init().unwrap();
+        let err = pipeline_from_description("nonexistent_element_for_test ! fakesink").unwrap_err();
+        assert!(err.to_string().contains("nonexistent_element_for_test"));
+    }
+
+    #[test]
+    fn single_non_pipeline_element_is_an_error() {
+        gst::init().unwrap();
+        assert!(pipeline_from_description("identity").is_err());
     }
 }
