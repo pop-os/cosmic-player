@@ -19,6 +19,7 @@ theme = Theme
 match-desktop = Match desktop
 dark = Dark
 light = Light
+appearance-overlay = Use player controls overlay in window mode
 
 # Menu
 
@@ -32,6 +33,9 @@ open-media-folder = Open media folder...
 open-recent-media-folder = Open recent media folder
 close-media-folder = Close media folder
 quit = Quit
+
+## View
+view = View
 
 # Controls
 
