@@ -86,6 +86,38 @@ pub fn menu_bar<'a>(
         ));
     }
 
+    let mut file = Vec::with_capacity(9);
+
+    file.push(menu::Item::Button(
+        fl!("open-media"),
+        None,
+        Action::FileOpen,
+    ));
+    file.push(menu::Item::Folder(fl!("open-recent-media"), recent_files));
+    if has_video {
+        file.push(menu::Item::Button(
+            fl!("close-file"),
+            None,
+            Action::FileClose,
+        ));
+    }
+    file.push(menu::Item::Divider);
+    file.push(menu::Item::Button(
+        fl!("open-media-folder"),
+        None,
+        Action::FolderOpen,
+    ));
+    file.push(menu::Item::Folder(
+        fl!("open-recent-media-folder"),
+        recent_projects,
+    ));
+    file.push(menu::Item::Folder(
+        fl!("close-media-folder"),
+        close_projects,
+    ));
+    file.push(menu::Item::Divider);
+    file.push(menu::Item::Button(fl!("quit"), None, Action::WindowClose));
+
     let mut playback = Vec::with_capacity(3);
 
     if has_video {
@@ -113,20 +145,7 @@ pub fn menu_bar<'a>(
     MenuBar::new(vec![
         menu::Tree::with_children(
             RcElementWrapper::new(Element::from(menu::root(fl!("file")))),
-            menu::items(
-                key_binds,
-                vec![
-                    menu::Item::Button(fl!("open-media"), None, Action::FileOpen),
-                    menu::Item::Folder(fl!("open-recent-media"), recent_files),
-                    menu::Item::Button(fl!("close-file"), None, Action::FileClose),
-                    menu::Item::Divider,
-                    menu::Item::Button(fl!("open-media-folder"), None, Action::FolderOpen),
-                    menu::Item::Folder(fl!("open-recent-media-folder"), recent_projects),
-                    menu::Item::Folder(fl!("close-media-folder"), close_projects),
-                    menu::Item::Divider,
-                    menu::Item::Button(fl!("quit"), None, Action::WindowClose),
-                ],
-            ),
+            menu::items(key_binds, file),
         ),
         menu::Tree::with_children(
             RcElementWrapper::new(Element::from(menu::root(fl!("playback")))),
