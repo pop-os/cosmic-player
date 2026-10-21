@@ -52,11 +52,19 @@ pub struct PlayerState {
     pub repeat: RepeatState,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum TimeState {
+    Elapsed,
+    Remaining,
+}
+
+
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConfigState {
     pub recent_files: VecDeque<url::Url>,
     pub recent_projects: VecDeque<PathBuf>,
     pub player_state: PlayerState,
+    pub time_state: TimeState,
 }
 
 impl Default for ConfigState {
@@ -67,6 +75,7 @@ impl Default for ConfigState {
             player_state: PlayerState {
                 repeat: RepeatState::Disabled,
             },
+            time_state: TimeState::Elapsed,
         }
     }
 }

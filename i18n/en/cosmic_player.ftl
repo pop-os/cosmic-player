@@ -38,6 +38,10 @@ quit = Quit
 repeat-disabled = Repeat disabled
 repeat-track = Repeat track
 
+time-elapsed = Elapsed time
+time-remaining = Remaining time
+time-total = Total duration
+
 playback = Playback
 next-frame = Next Frame
 previous-frame = Previous Frame
