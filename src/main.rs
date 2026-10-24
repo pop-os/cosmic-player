@@ -93,22 +93,6 @@ fn positive_framerate(framerate: gst::Fraction) -> Option<f64> {
     fps.is_finite().then_some(fps)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::positive_framerate;
-    use iced_video_player::gst;
-
-    #[test]
-    fn variable_framerate_uses_fallback() {
-        assert_eq!(positive_framerate(gst::Fraction::new(0, 1)), None);
-    }
-
-    #[test]
-    fn fixed_framerate_is_preserved() {
-        assert_eq!(positive_framerate(gst::Fraction::new(30, 1)), Some(30.0));
-    }
-}
-
 /// Runs application with these settings
 #[rustfmt::skip]
 fn main() -> Result<(), Box<dyn Error>> {
@@ -491,11 +475,12 @@ impl App {
         self.set_looping_from_repeat_state();
         self.update_flags();
         self.update_mpris_meta();
-        if self.playback_speed != 1.0 {
-            if let Some(video) = &mut self.video_opt {
-                Self::apply_speed(video, self.playback_speed);
-            }
+        if self.playback_speed != 1.0
+            && let Some(video) = &mut self.video_opt
+        {
+            Self::apply_speed(video, self.playback_speed);
         }
+
         self.update_title()
     }
 
@@ -1289,13 +1274,33 @@ impl Application for App {
                         Message::Pause => true,
                         _ => !video.paused(),
                     };
-                    video.set_paused(pause);
+                    let tasks = if !pause && video.eos() {
+                        // This looks slightly convuluted because I'm essentially restarting the
+                        // stream twice. However, after extensive testing this is the only reliable
+                        // way I've found of restarting the stream. Removing restart_stream() or the
+                        // manual seek breaks this code. Trying to manually seek here by setting
+                        // self.position = 0.0 also does not work. My guess is that the UI needs to
+                        // unstick itself so forcing the manual seek does just that.
+                        if let Err(e) = video.restart_stream() {
+                            log::error!("Couldn't restart stream: {e}");
+                            Task::none()
+                        } else {
+                            Task::done(action::app(Message::Seek(0.0)))
+                                .then(|_| Task::done(action::app(Message::SeekRelease)))
+                                .then(|_| Task::done(action::app(Message::Play)))
+                        }
+                    } else {
+                        video.set_paused(pause);
+                        Task::none()
+                    };
                     self.update_controls(true);
                     if pause {
                         self.allow_idle();
                     } else {
                         self.inhibit_idle();
                     }
+
+                    return tasks;
                 }
             }
             Message::RepeatToggled(state) => {
@@ -1397,7 +1402,9 @@ impl Application for App {
                 let curr_position = match self.nav_model.position(curr_id) {
                     Some(pos) => pos,
                     None => {
-                        log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        if self.nav_model.len() > 1 {
+                            log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        }
                         return self.update(Message::EndOfStream);
                     }
                 };
@@ -1460,7 +1467,9 @@ impl Application for App {
                 let curr_position = match self.nav_model.position(curr_id) {
                     Some(pos) => pos,
                     None => {
-                        log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        if self.nav_model.len() > 1 {
+                            log::warn!("Failed to get position of current media: {:?}", curr_id);
+                        }
                         return self.update(Message::EndOfStream);
                     }
                 };
@@ -1976,7 +1985,7 @@ impl Application for App {
                     if self
                         .video_opt
                         .as_ref()
-                        .map_or(true, |video| video.has_video())
+                        .is_none_or(|video| video.has_video())
                     {
                         widget::button::icon(
                             widget::icon::from_svg_bytes(JUMP_BACKWARD_ICON).symbolic(true),
@@ -1991,7 +2000,7 @@ impl Application for App {
                 );
             row = row.push(
                 widget::button::icon(
-                    if self.video_opt.as_ref().map_or(true, |video| video.paused()) {
+                    if self.video_opt.as_ref().is_none_or(|video| video.paused()) {
                         widget::icon::from_name("media-playback-start-symbolic").size(16)
                     } else {
                         widget::icon::from_name("media-playback-pause-symbolic").size(16)
@@ -2004,7 +2013,7 @@ impl Application for App {
                 if self
                     .video_opt
                     .as_ref()
-                    .map_or(true, |video| video.has_video())
+                    .is_none_or(|video| video.has_video())
                 {
                     widget::button::icon(
                         widget::icon::from_svg_bytes(JUMP_FORWARD_ICON).symbolic(true),
@@ -2214,5 +2223,21 @@ impl Application for App {
         }
 
         Subscription::batch(subscriptions)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::positive_framerate;
+    use iced_video_player::gst;
+
+    #[test]
+    fn variable_framerate_uses_fallback() {
+        assert_eq!(positive_framerate(gst::Fraction::new(0, 1)), None);
+    }
+
+    #[test]
+    fn fixed_framerate_is_preserved() {
+        assert_eq!(positive_framerate(gst::Fraction::new(30, 1)), Some(30.0));
     }
 }
