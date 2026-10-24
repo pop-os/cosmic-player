@@ -1,3 +1,10 @@
 quit = Surt
 settings = Configuració
 open-file = Obre el fitxer
+open-folder = Obre la carpeta
+dark = Fosc
+light = Clar
+appearance = Aparença
+theme = Tema
+match-desktop = Igual que el sistema
+file = Fitxer
