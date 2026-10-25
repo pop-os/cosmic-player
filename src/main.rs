@@ -283,7 +283,7 @@ pub struct MprisState {
 
 #[derive(Clone, Debug)]
 pub enum MprisEvent {
-    Meta(MprisMeta),
+    Meta(Box<MprisMeta>),
     State(MprisState),
 }
 
@@ -337,7 +337,11 @@ pub enum Message {
     PreviousFrame,
     EndOfStream,
     MissingPlugin(gst::Message),
-    MprisChannel(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>),
+    MprisChannel(
+        Box<MprisMeta>,
+        MprisState,
+        mpsc::UnboundedSender<MprisEvent>,
+    ),
     NewFrame,
     Reload,
     AbRepeat,
@@ -362,7 +366,11 @@ pub struct App {
     fullscreen: bool,
     key_binds: HashMap<KeyBind, Action>,
     mpris_meta: MprisMeta,
-    mpris_opt: Option<(MprisMeta, MprisState, mpsc::UnboundedSender<MprisEvent>)>,
+    mpris_opt: Option<(
+        Box<MprisMeta>,
+        MprisState,
+        mpsc::UnboundedSender<MprisEvent>,
+    )>,
     nav_model: segmented_button::SingleSelectModel,
     projects: Vec<(String, PathBuf)>,
     video_opt: Option<Video>,
@@ -789,10 +797,10 @@ impl App {
             }
         }
         if let Some((old, _, tx)) = &mut self.mpris_opt
-            && new != *old
+            && new != **old
         {
-            *old = new.clone();
-            let _ = tx.send(MprisEvent::Meta(new.clone()));
+            **old = new.clone();
+            let _ = tx.send(MprisEvent::Meta(Box::new(new.clone())));
         }
         self.mpris_meta = new;
     }
