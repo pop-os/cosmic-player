@@ -1260,8 +1260,10 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt
                     && (0.0..=1.0).contains(&volume)
                 {
+                    if volume > video.volume() {
+                        video.set_muted(false);
+                    }
                     video.set_volume(volume);
-                    video.set_muted(false);
                     self.update_controls(true);
                 }
             }
@@ -1346,8 +1348,10 @@ impl Application for App {
                     }
 
                     if (0.0..=1.0).contains(&volume) && !nav_bar_toggled {
+                        if volume > video.volume() {
+                            video.set_muted(false);
+                        }
                         video.set_volume(volume);
-                        video.set_muted(false);
                         self.update_controls(true);
                     }
                 }
