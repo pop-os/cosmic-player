@@ -118,7 +118,11 @@ pub fn menu_bar<'a>(
                 vec![
                     menu::Item::Button(fl!("open-media"), None, Action::FileOpen),
                     menu::Item::Folder(fl!("open-recent-media"), recent_files),
-                    menu::Item::Button(fl!("close-file"), None, Action::FileClose),
+                    if has_video {
+                        menu::Item::Button
+                    } else {
+                        menu::Item::ButtonDisabled
+                    }(fl!("close-file"), None, Action::FileClose),
                     menu::Item::Divider,
                     menu::Item::Button(fl!("open-media-folder"), None, Action::FolderOpen),
                     menu::Item::Folder(fl!("open-recent-media-folder"), recent_projects),
