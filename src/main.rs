@@ -12,6 +12,7 @@ use cosmic::iced::window::{self, set_mode};
 use cosmic::iced::{
     Alignment, Background, Border, Color, ContentFit, Length, Limits, Subscription,
 };
+use cosmic::iced::widget::container::Catalog;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::{self, Slider, nav_bar, segmented_button};
 use cosmic::{Application, ApplicationExt, Element, action, cosmic_theme, executor, font, theme};
@@ -2095,7 +2096,11 @@ impl Application for App {
                 widget::mouse_area(
                     widget::container(row)
                         .padding([space_xxs, space_xs])
-                        .class(theme::Container::WindowBackground),
+                        .class(theme::Container::custom(|theme| {
+                            let mut style = theme.style(&theme::Container::WindowBackground);
+                            style.border.radius = 0.0.into();
+                            style
+                        }))
                 )
                 .on_press(Message::ShowControls)
                 .into(),
