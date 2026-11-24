@@ -130,9 +130,9 @@ mod tests {
     #[test]
     fn long_audio_gap_is_suspicious() {
         assert!(is_suspicious_audio_gap(Some(gst::ClockTime::SECOND)));
-        assert!(is_suspicious_audio_gap(Some(
-            gst::ClockTime::from_seconds(3)
-        )));
+        assert!(is_suspicious_audio_gap(Some(gst::ClockTime::from_seconds(
+            3
+        ))));
     }
 
     #[test]

@@ -54,6 +54,7 @@ pub struct PlayerState {
 
 #[derive(Clone, CosmicConfigEntry, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ConfigState {
+    pub overlay_in_window_mode: bool,
     pub recent_files: VecDeque<url::Url>,
     pub recent_projects: VecDeque<PathBuf>,
     pub player_state: PlayerState,
@@ -62,6 +63,7 @@ pub struct ConfigState {
 impl Default for ConfigState {
     fn default() -> Self {
         Self {
+            overlay_in_window_mode: true,
             recent_files: VecDeque::new(),
             recent_projects: VecDeque::new(),
             player_state: PlayerState {
