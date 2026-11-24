@@ -385,7 +385,11 @@ fn watcher_stream() -> impl Stream<Item = Message> {
             let meta: MprisMeta = MprisMeta::default();
             let state: MprisState = MprisState::default();
             msg_tx
-                .send(Message::MprisChannel(meta.clone(), state.clone(), event_tx))
+                .send(Message::MprisChannel(
+                    Box::new(meta.clone()),
+                    state.clone(),
+                    event_tx,
+                ))
                 .await
                 .unwrap();
             match Server::new(
@@ -410,7 +414,7 @@ fn watcher_stream() -> impl Stream<Item = Message> {
                                 if new_metadata != old.metadata() {
                                     props.push(Property::Metadata(new_metadata));
                                 }
-                                *old = new;
+                                *old = *new;
                             }
                             MprisEvent::State(new) => {
                                 let mut old = server.imp().state.lock().await;
