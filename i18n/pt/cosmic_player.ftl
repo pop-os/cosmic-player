@@ -19,8 +19,8 @@ settings = Definições
 appearance = Aparência
 theme = Tema
 match-desktop = Estilo do sistema
-dark = Escuro
-light = Claro
+dark = Estilo escuro
+light = Estilo claro
 
 # Menu
 
