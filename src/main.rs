@@ -405,6 +405,7 @@ pub struct App {
     overlay_text: String,
     overlay_time: Instant,
     overlay_visible: bool,
+    shortcut_event: bool,
 }
 
 impl App {
@@ -680,7 +681,7 @@ impl App {
     }
 
     fn update_controls(&mut self, in_use: bool) {
-        if in_use
+        if (in_use && !self.shortcut_event)
             || self.controls_hovered
             || !self
                 .video_opt
@@ -992,6 +993,7 @@ impl Application for App {
             overlay_text: "".to_string(),
             overlay_visible: false,
             overlay_time: Instant::now(),
+            shortcut_event: false,
         };
 
         // Do not show nav bar by default. Will be opened by open_project if needed
@@ -1263,7 +1265,10 @@ impl Application for App {
                 self.overlay_text = "".to_string();
                 self.overlay_time = Instant::now();
                 self.overlay_visible = true;
-                return self.update(*message);
+                self.shortcut_event = true;
+                let task = self.update(*message);
+                self.shortcut_event = false;
+                return task;
             }
             Message::Fullscreen => {
                 //TODO: cleanest way to close dropdowns
@@ -1302,9 +1307,9 @@ impl Application for App {
                 if let Some(video) = &mut self.video_opt {
                     video.set_muted(!video.muted());
                     self.overlay_text = if video.muted() {
-                        fl!("sound-off")
-                    } else {
                         fl!("sound-on")
+                    } else {
+                        fl!("sound-off")
                     };
                     self.update_controls(true);
                 }
@@ -1624,6 +1629,7 @@ impl Application for App {
                 }
             }
             Message::PlaybackSpeed(speed) => {
+                let speed = speed.max(0.25).min(4.5);
                 self.playback_speed = speed;
                 self.dropdown_opt = None;
                 if let Some(video) = &mut self.video_opt {
